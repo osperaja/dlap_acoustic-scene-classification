@@ -1,0 +1,20 @@
+# python cache and installation builds
+**/__pycache__/
+**/*.pyc
+*.egg-info
+
+#  audio and binaries
+**/*.wav
+**/*.pdf
+**/*.mp4
+**/*.pkl
+
+# jupyter notebooks
+**/.ipynb_checkpoints/*
+
+# slurm scripts
+**/slurm/
+
+# checkpoints
+**/*.ckpt
+**/ckpts/*
