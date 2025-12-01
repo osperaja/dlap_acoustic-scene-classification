@@ -32,10 +32,11 @@ class BaselineModel(torch.nn.Module):
         )
 
         # nn architecture
-        layers = [nn.Conv1d(n_mels, n_hidden_feats, kernel_size=1), nn.ReLU(), nn.Dropout(dropout)]
+        layers = [nn.Conv1d(n_mels, n_hidden_feats, kernel_size=1), nn.ReLU(), nn.Dropout(dropout), nn.BatchNorm1d(n_hidden_feats)]
 
         for _ in range(n_hidden_layer - 1):
             layers.append(nn.Conv1d(n_hidden_feats, n_hidden_feats, kernel_size=1))
+            layers.append(nn.BatchNorm1d(n_hidden_feats))
             layers.append(nn.ReLU())
             layers.append(nn.Dropout(dropout))
 
