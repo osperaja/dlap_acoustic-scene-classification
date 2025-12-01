@@ -27,10 +27,10 @@ class AcousticScenesDatamodule(pl.LightningDataModule):
             dataset_name='val',
             **ds_kwargs,
         )
-        self.test_dataset = AcousticScenesDataset(
-            dataset_name='test',
-            **ds_kwargs,
-        )
+        # self.test_dataset = AcousticScenesDataset(
+        #     dataset_name='test',
+        #     **ds_kwargs,
+        # )
 
     def train_dataloader(self):
         return DataLoader(
