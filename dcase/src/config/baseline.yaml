@@ -6,6 +6,7 @@ data:
 
 experiment:
   learning_rate: 0.001
+  max_epochs: 200
   n_label: 15
 
 network:
