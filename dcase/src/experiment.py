@@ -7,11 +7,13 @@ class AcousticScenesExperiment(pl.LightningModule):
     def __init__(
             self,
             learning_rate: float,
+            max_epochs: int,
         ):
         super(AcousticScenesExperiment, self).__init__()
 
         # init attributes
         self.learning_rate = learning_rate
+        self.max_epochs = max_epochs
     
     def shared_step(
             self, 
@@ -35,6 +37,14 @@ class AcousticScenesExperiment(pl.LightningModule):
         ) -> torch.Tensor:
         return self.shared_step(batch, batch_idx, stage='val')
 
-    def configure_optimizers(self) -> torch.optim.Adam:
-        return torch.optim.Adam(self.parameters(), lr=self.learning_rate)
-   
+    def configure_optimizers(self):
+        optimizer = torch.optim.Adam(self.parameters(), lr=self.learning_rate)
+        scheduler = torch.optim.lr_scheduler.CosineAnnealingLR(optimizer, T_max=self.max_epochs)
+        return {
+            'optimizer': optimizer,
+            'lr_scheduler': {
+                'scheduler': scheduler,
+                'interval': 'epoch',
+                'frequency': 1,
+            }
+        }
