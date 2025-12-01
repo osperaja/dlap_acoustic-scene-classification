@@ -2,7 +2,7 @@ import warnings
 warnings.filterwarnings("ignore", category=FutureWarning)
 import pytorch_lightning as pl
 from pytorch_lightning import loggers as pl_loggers
-from pytorch_lightning.callbacks import ModelSummary, ModelCheckpoint
+from pytorch_lightning.callbacks import ModelSummary, ModelCheckpoint, EarlyStopping
 import yaml
 from torch.multiprocessing import set_start_method
 from dcase.src.datamodule import AcousticScenesDatamodule as DM
@@ -25,6 +25,12 @@ def setup_logging(tb_log_dir: str, exp_name: str, version_id: int=None):
 
 
 def get_trainer(devices, logger, max_epochs, strategy, accelerator, ckpt_dir):
+    early_stopping_callback = EarlyStopping(
+        monitor='val/accuracy',
+        patience=5,
+        mode='max',
+        verbose=True
+    )
     checkpoint_callback = ModelCheckpoint(
         dirpath=ckpt_dir,
         save_top_k=3,
@@ -39,7 +45,7 @@ def get_trainer(devices, logger, max_epochs, strategy, accelerator, ckpt_dir):
         max_epochs=max_epochs,
         strategy = strategy,
         accelerator = accelerator,
-        callbacks=[checkpoint_callback, ModelSummary(max_depth=2)],
+        callbacks=[checkpoint_callback, early_stopping_callback, ModelSummary(max_depth=2)],
     )
 
 
@@ -58,7 +64,7 @@ if __name__== "__main__":
     )
     exp = Exp(
         model=model, 
-        **config['experiment'], 
+        **config['experiment'],
     )
 
     # setup logging 
