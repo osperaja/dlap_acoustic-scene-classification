@@ -18,7 +18,7 @@ class AcousticScenesDataset(torch.utils.data.Dataset):
         super(AcousticScenesDataset, self).__init__()
 
         # initialize attributes
-        self.data_path = f'/data/baproj/dcase/dlap/{dataset_name}'
+        self.data_path = f'/data/baproj/dlap/{dataset_name}'
         self.sample_rate = sample_rate
         self.mono = mono
 
