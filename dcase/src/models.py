@@ -11,16 +11,13 @@ class BaselineModel(torch.nn.Module):
             f_min: float = 0.0,
             f_max: float = 22050.0,
             n_mels: int = 40,
-            dropout: float = 0.2,
-            n_aggregate: int = 5,
             n_label: int = 15,
-            n_hidden_feats: int = 50,
-            n_hidden_layer: int = 2,
-        ):
+            lstm_hidden=64,
+            lstm_layers=1,
+            cnn_dropout:float= 0.2,
+            lstm_dropout:float= 0.5,
+    ):
         super(BaselineModel, self).__init__()
-
-        # init attributes
-        self.n_aggregate = n_aggregate
 
         # mel spectrogram as feature transform
         self.mel_transform = MelSpectrogram(
@@ -32,31 +29,48 @@ class BaselineModel(torch.nn.Module):
         )
 
         # nn architecture
-        layers = [nn.Conv1d(n_mels, n_hidden_feats, kernel_size=1), nn.ReLU(), nn.Dropout(dropout), nn.BatchNorm1d(n_hidden_feats)]
+        self.cnn = nn.Sequential(
+            nn.Conv2d(1, 32, kernel_size=3, padding=1),
+            nn.GroupNorm(8, 32),
+            nn.GELU(),
+            nn.MaxPool2d((2, 1)),
 
-        for _ in range(n_hidden_layer - 1):
-            layers.append(nn.Conv1d(n_hidden_feats, n_hidden_feats, kernel_size=1))
-            layers.append(nn.BatchNorm1d(n_hidden_feats))
-            layers.append(nn.ReLU())
-            layers.append(nn.Dropout(dropout))
+            nn.Conv2d(32, 64, kernel_size=3, padding=1),
+            nn.GroupNorm(8, 64),
+            nn.GELU(),
+            nn.MaxPool2d((2, 1), stride=(2,1)),
 
-        layers.append(nn.Conv1d(n_hidden_feats, n_label, kernel_size=1))
+            nn.Dropout(cnn_dropout),
+        )
 
-        self.network = nn.Sequential(*layers)
+        lstm_input = 64 * (n_mels // 4)
+
+        self.lstm = nn.LSTM(
+            input_size=lstm_input,
+            hidden_size=lstm_hidden,
+            num_layers=lstm_layers,
+            batch_first=True,
+            dropout=lstm_dropout if lstm_layers > 1 else 0.0,
+            bidirectional=True,
+        )
+
+        # Output-Layer
+        self.fc_dropout = nn.Dropout(0.2)
+        self.output_layer = nn.Linear(lstm_hidden * 2, n_label)
 
     def forward(
-            self, 
+            self,
             audio_data: torch.Tensor,  # (BATCH, CHANNEL=1, TIME)
-        ) -> torch.Tensor:  # (BATCH, FRAMES', LABEL)
+    ) -> torch.Tensor:  # (BATCH, FRAMES', LABEL)
         assert audio_data.shape[1] == 1, ('baseline is single-channel', audio_data.shape[1])
 
-        # compute log-mel spectrogram as feature transform
-        features = torch.log(self.mel_transform(audio_data) + 1e-6)  # (BATCH, FEAT, FRAMES)
+        spec = torch.log(self.mel_transform(audio_data) + 1e-6)
 
-        # aggregate features
-        aggregated_features = features.squeeze(1) # (BATCH, FEAT, FRAMES')
-        
-        # forward network
-        logits = self.network(aggregated_features).transpose(1, 2)  # (BATCH, FRAMES', LABEL)
-        
+        features = self.cnn(spec)
+
+        B, C, F, T = features.shape
+        features = features.permute(0, 3, 1, 2).reshape(B, T, C * F)
+
+        features, _ = self.lstm(features)
+        logits= self.output_layer(features)
         return logits
