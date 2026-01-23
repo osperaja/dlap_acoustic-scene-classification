@@ -12,6 +12,10 @@ experiment:
 network:
   n_fft: 2048
   n_mels: 40
+  dropout: 0.2
+  n_aggregate: 5
+  n_hidden_feats: 50
+  n_hidden_layer: 2
   f_min: 0
   f_max: 22050
 
