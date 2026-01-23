@@ -11,21 +11,31 @@ import os
 class AcousticScenesDataset(torch.utils.data.Dataset):
     def __init__(
             self,
-            dataset_name: Literal['train', 'val'],
+            dataset_name: Literal['train', 'val', 'test'],
             sample_rate: int = 44100,
             mono: bool = True,
-        ):
+            base_data_path: str = './data/dcase'
+    ):
+        cwdir = os.path.dirname(os.path.realpath(__file__))
+        print(f'Current working directory: {cwdir}')
         super(AcousticScenesDataset, self).__init__()
 
         # initialize attributes
-        self.data_path = f'/data/baproj/dlap/{dataset_name}'
+        self.data_path = os.path.join(base_data_path, dataset_name)
         self.sample_rate = sample_rate
         self.mono = mono
 
+        if dataset_name == 'test':
+            self.meta_df = pd.read_csv(
+                self.data_path + '/meta_blind.txt', delimiter='\t', header=None,
+                names=['audio_path', 'scene_name', 'scene_id']
+            )
         # load meta
-        self.meta_df = pd.read_csv(
-            self.data_path + '/meta.txt', delimiter='\t', header=None, names=['audio_path', 'scene_name', 'scene_id']
-        )
+        else:
+            self.meta_df = pd.read_csv(
+                self.data_path + '/meta.txt', delimiter='\t', header=None,
+                names=['audio_path', 'scene_name', 'scene_id']
+            )
 
         # remove broken samples in development set
         if dataset_name == 'train':
@@ -68,4 +78,3 @@ class AcousticScenesDataset(torch.utils.data.Dataset):
         example['class_label'] = torch.tensor(example['class_label'])  # ()
 
         return example
-        

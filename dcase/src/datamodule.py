@@ -1,17 +1,20 @@
 import torch
 from torch.utils.data import DataLoader, Dataset
 import pytorch_lightning as pl
-from dcase.src.dataset import AcousticScenesDataset
+try:
+    from .dataset import AcousticScenesDataset
+except ImportError:
+    from dataset import AcousticScenesDataset
 from typing import List, Dict, Union
 
 
 class AcousticScenesDatamodule(pl.LightningDataModule):
     def __init__(
-        self,
-        batch_size: int = 8,
-        n_workers: int = 16,
-        **ds_kwargs
-        ):
+            self,
+            batch_size: int = 8,
+            n_workers: int = 16,
+            **ds_kwargs
+    ):
         super(AcousticScenesDatamodule, self).__init__()
 
         # initialize attributes
@@ -48,7 +51,7 @@ class AcousticScenesDatamodule(pl.LightningDataModule):
             batch_size=self.batch_size,
             num_workers=self.n_workers,
             shuffle=False,
-            collate_fn=collate_fn, 
+            collate_fn=collate_fn,
             persistent_workers=True if self.n_workers > 0 else False,
         )
 
@@ -58,20 +61,20 @@ class AcousticScenesDatamodule(pl.LightningDataModule):
             batch_size=1,
             num_workers=0,
             shuffle=False,
-            collate_fn=collate_fn, 
+            collate_fn=collate_fn,
         )
 
+
 def collate_fn(
-    batch: List[Dict[str, Union[torch.Tensor, str, int]]]
-    ) -> Dict[str, Union[torch.Tensor, str, int]]:
+        batch: List[Dict[str, Union[torch.Tensor, str, int]]]
+) -> Dict[str, Union[torch.Tensor, str, int]]:
     return {
         key: torch.stack(
-                [sample[key] for sample in batch], dim=0
-            ) 
-            if isinstance(value, torch.Tensor) else
-            [
-                sample[key] for sample in batch
-            ]
-         for key, value in batch[0].items()
+            [sample[key] for sample in batch], dim=0
+        )
+        if isinstance(value, torch.Tensor) else
+        [
+            sample[key] for sample in batch
+        ]
+        for key, value in batch[0].items()
     }
-

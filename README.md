@@ -38,3 +38,21 @@ Here is a more detailed summary of the network architecture:
 - The system performance was measured using accuracy, defined as the ratio between the number of correct system outputs and the total number of outputs. 
 
 With a correct setup, you should achieve > 60% accuracy on the validation dataset.
+
+## Training
+
+The project supports multiple model architectures via YAML configuration files. Use the `--config` argument to select which model to train.
+
+### Available Models
+
+| Model | Config | Description |
+|-------|--------|-------------|
+| `BaselineModel` | `baseline.yaml` | DCASE baseline MLP with 5-frame context (200 input features) |
+| `LinSeqModel` | `linseq.yaml` | Extended linear sequential model |
+
+### Usage
+
+```bash
+python3 dcase/src/train.py --config dcase/src/config/baseline.yaml
+python3 dcase/src/train.py --config dcase/src/config/linseq.yaml
+```

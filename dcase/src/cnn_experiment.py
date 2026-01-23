@@ -9,48 +9,48 @@ from torchmetrics.aggregation import RunningMean
 from typing import Literal
 
 
-class BaselineExperiment(AcousticScenesExperiment):
+class CNNExperiment(AcousticScenesExperiment):
     def __init__(
             self,
             model: torch.nn.Module,
             n_label: int,
             **exp_kwargs,
     ):
-        super(BaselineExperiment, self).__init__(**exp_kwargs)
+        super(CNNExperiment, self).__init__(**exp_kwargs)
 
-        # init attributes
         self.model = model
 
-        # init metrics
         self.ce_loss = torch.nn.CrossEntropyLoss(reduction='mean')
         self.accuracy = Accuracy(task='multiclass', num_classes=n_label)
         self.running_accuracy = RunningMean(window=100)
 
+    def mixup_criterion(self, logits, y_a, y_b, lam):
+        """Compute mixup loss as weighted combination of two targets."""
+        return lam * self.ce_loss(logits, y_a) + (1 - lam) * self.ce_loss(logits, y_b)
+
     def shared_step(self, batch, batch_idx, stage: Literal['train', 'val', 'test']):
-        # load data
         audio_data = batch['audio_data'].to(device=self.device)  # (BATCH, CHANNEL, TIME)
         target_label = batch['class_label'].to(device=self.device)  # (BATCH)
 
-        # forward model
-        logits = self.model(audio_data)  # (BATCH, FRAMES', CLASS)
+        # Forward model - pass labels for mixup during training
+        labels_for_mixup = target_label if stage == 'train' else None
+        output = self.model(audio_data, labels_for_mixup)
 
-        # compute loss
-        t_label = target_label[:, None].expand(logits.shape[:-1])  # (BATCH, FRAMES')
-        loss = self.ce_loss(
-            torch.flatten(logits, end_dim=1), torch.flatten(t_label, end_dim=1)
-        )
+        # Handle dict output from CNNModel
+        logits = output["logits"]  # (BATCH, n_label)
 
-        # compute accuracy with majority voting
+        # Compute loss
+        if stage == 'train' and "y_a" in output:
+            # Mixup loss
+            loss = self.mixup_criterion(logits, output["y_a"], output["y_b"], output["lam"])
+        else:
+            loss = self.ce_loss(logits, target_label)
+
+        # Compute accuracy
         with torch.no_grad():
-            est_label = torch.argmax(logits, dim=-1).squeeze(dim=1)  # (BATCH, FRAMES')
-            est_label = torch.stack(
-                [
-                    torch.bincount(e_label).argmax() for e_label in est_label
-                ]
-            )  # (BATCH)
+            est_label = torch.argmax(logits, dim=-1)  # (BATCH)
             est_accuracy = self.accuracy(est_label, target_label)
 
-            # loss and accuracy logging
         self.log(
             f'{stage}/loss',
             loss,
