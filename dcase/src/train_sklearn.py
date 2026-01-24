@@ -14,10 +14,10 @@ import joblib
 from datetime import datetime
 
 try:
-    from .models import SklearnAudioClassifier, HierarchicalClassifier
+    from .models import SklearnAudioClassifier
     from .dataset import AcousticScenesDataset
 except ImportError:
-    from models import SklearnAudioClassifier, HierarchicalClassifier
+    from models import SklearnAudioClassifier
     from dataset import AcousticScenesDataset
 
 
