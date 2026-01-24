@@ -18,7 +18,7 @@ The project supports multiple model architectures via YAML configuration files. 
 | `BaselineModel` | `baseline.yaml` | DCASE baseline MLP with 5-frame context (200 input features) |
 | `LinSeqModel` | `linseq.yaml` | Extended linear sequential model with SpecAugment |
 | `CNNModel` | `cnn.yaml` | CNN with SpecAugment and Mixup augmentation |
-| `EnsembleCNNModel` | `cnn_ensemble.yaml` | CNN Ensemble with SpecAugment and (some) Mixup and SpecAugment |
+| `EnsembleCNNModel` | `cnn_ensemble.yaml` | Multi-Stream CNN Ensemble with SpecAugment and (some) Mixup and SpecAugment |
 | `SklearnAudioClassifier` | `random_forest.yaml` | Random Forest on mel spectrogram statistics |
 | `SklearnAudioClassifier` | `pca_svm.yaml` | PCA + SVM pipeline on mel spectrogram statistics |
 
