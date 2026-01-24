@@ -31,14 +31,22 @@ EXPERIMENT_REGISTRY = {
 }
 
 
-class EarlyStoppingFromEpoch(EarlyStopping):
-    def __init__(self, start_epoch: int = 0, **kwargs):
-        super().__init__(**kwargs)
+class DelayedStartEarlyStopping(EarlyStopping):
+    def __init__(self, start_epoch, *args, **kwargs):
+        super().__init__(*args, **kwargs)
+        # set start_epoch to None or 0 for no delay
         self.start_epoch = start_epoch
 
-    def on_validation_end(self, trainer, pl_module, *args, **kwargs):
-        if trainer.current_epoch >= self.start_epoch:
-            super().on_validation_end(trainer, pl_module, *args, **kwargs)
+    def on_train_epoch_end(self, trainer: "pl.Trainer", pl_module: "pl.LightningModule") -> None:
+        if (self.start_epoch is not None) and (trainer.current_epoch < self.start_epoch):
+            return
+        super().on_train_epoch_end(trainer, pl_module)
+
+    def on_validation_end(self, trainer: "pl.Trainer", pl_module: "pl.LightningModule") -> None:
+        if (self.start_epoch is not None) and (trainer.current_epoch < self.start_epoch):
+            return
+        super().on_validation_end(trainer, pl_module)
+
 
 
 def setup_logging(tb_log_dir: str, exp_name: str, version_id: int = None):
@@ -59,8 +67,8 @@ def get_trainer(devices, logger, max_epochs, strategy, accelerator, ckpt_dir):
         auto_insert_metric_name=False,
         filename='epoch={epoch}-val_acc={val/accuracy:.2f}'
     )
-    early_stop = EarlyStoppingFromEpoch(
-        start_epoch=0,
+    early_stop = DelayedStartEarlyStopping( # https://github.com/Lightning-AI/pytorch-lightning/issues/16881, https://github.com/samgelman
+        start_epoch=50,
         monitor="val/accuracy",
         patience=10,
         mode="max",

@@ -18,7 +18,9 @@ network:
   dropout: 0.3
   f_min: 0
   f_max: 22050
-  conv_channels: [64, 128, 256]
+  conv_channels: [ 64, 128, 256 ]
+  last_layer_pooling: false
+  pooling: [ 2,2 ]
   classifier_hidden: 128
 
 augmentation:

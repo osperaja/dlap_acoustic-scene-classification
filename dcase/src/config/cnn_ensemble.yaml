@@ -18,16 +18,18 @@ network:
     sample_rate: 44100
     n_mels: 40
     dropout: 0.3
+    last_layer_pooling: false
+    pooling: [ 2,2 ]
     n_label: 15
-    spec_augment: true
-    use_mixup: true
-    conv_channels: [64, 128, 256]
+    spec_augment: false
+    use_mixup: false
+    conv_channels: [ 64, 128, 256 ] # [64, 128, 256] got a 74.4% accuracy
     classifier_hidden: 128
-    freq_mask_param: 15
-    time_mask_param: 20
-    n_freq_masks: 2
-    n_time_masks: 2
-    mixup_alpha: 0.2
+    freq_mask_param: 6
+    time_mask_param: 10
+    n_freq_masks: 1
+    n_time_masks: 1
+    mixup_alpha: 0.05
 
 training:
   max_epochs: 200

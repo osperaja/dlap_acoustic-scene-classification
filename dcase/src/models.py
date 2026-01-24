@@ -1,6 +1,7 @@
 import numpy as np
 import torch
 from torch import nn
+from torch.nn.modules import pooling
 from torchaudio.transforms import MelSpectrogram
 from preprocessing import MultiStreamPreprocessor
 
@@ -173,6 +174,8 @@ class CNNModel(torch.nn.Module):
             time_mask_param: int = 20,
             n_freq_masks: int = 2,
             n_time_masks: int = 2,
+            pooling=[3, 3],
+            last_layer_pooling=False,
             mixup_alpha: float = 0.2,
             use_mixup: bool = True,
             conv_channels: list = None,
@@ -187,6 +190,8 @@ class CNNModel(torch.nn.Module):
         self.n_mels = n_mels
         self.use_mixup = use_mixup
         self.mixup_alpha = mixup_alpha
+        self.last_layer_pooling = last_layer_pooling
+        self.pooling = pooling
 
         self.mel_transform = MelSpectrogram(
             sample_rate=sample_rate,
@@ -208,7 +213,7 @@ class CNNModel(torch.nn.Module):
         # Build CNN blocks dynamically
         blocks = []
         in_channels = 1
-        for out_channels in conv_channels:
+        for i, out_channels in enumerate(conv_channels):
             blocks.extend([
                 nn.BatchNorm2d(in_channels),
                 nn.ReLU(),
@@ -216,9 +221,10 @@ class CNNModel(torch.nn.Module):
                 nn.BatchNorm2d(out_channels),
                 nn.ReLU(),
                 nn.Conv2d(out_channels, out_channels, kernel_size=3, padding=1),
-                nn.MaxPool2d(3, 3),
-                nn.Dropout2d(dropout),
             ])
+            if not last_layer_pooling and i < len(conv_channels) - 1:
+                blocks.append(nn.MaxPool2d(self.pooling[0], self.pooling[1]))
+            blocks.append(nn.Dropout2d(dropout))
             in_channels = out_channels
 
         self.conv_blocks = nn.Sequential(*blocks)
@@ -277,6 +283,8 @@ class DualChannelCNNModel(torch.nn.Module):
                  n_mels: int = 40,
                  dropout: float = 0.3,
                  n_label: int = 15,
+                 pooling=[3, 3],
+                 last_layer_pooling=False,
                  conv_channels: list = None,
                  classifier_hidden: int = 1024,
                  spec_augment=False,
@@ -292,11 +300,26 @@ class DualChannelCNNModel(torch.nn.Module):
         if conv_channels is None:
             conv_channels = [32, 64, 128, 256]
 
+        self.spec_augment = spec_augment
+        self.use_mixup = use_mixup
+        self.mixup_alpha = mixup_alpha
+        self.last_layer_pooling = last_layer_pooling
+        self.pooling = pooling
+
         self.mel_transform = MelSpectrogram(
             sample_rate=sample_rate,
             n_fft=n_fft,
             n_mels=n_mels,
         )
+
+        if spec_augment:
+            from torchaudio.transforms import FrequencyMasking, TimeMasking
+            self.freq_masks = nn.ModuleList([
+                FrequencyMasking(freq_mask_param) for _ in range(n_freq_masks)
+            ])
+            self.time_masks = nn.ModuleList([
+                TimeMasking(time_mask_param) for _ in range(n_time_masks)
+            ])
 
         # two separate conv branches (one per channel)
         self.branch1 = self._make_branch(conv_channels, dropout)
@@ -315,21 +338,45 @@ class DualChannelCNNModel(torch.nn.Module):
     def _make_branch(self, conv_channels, dropout):
         blocks = []
         in_ch = 1
-        for out_ch in conv_channels:
+        for i, out_ch in enumerate(conv_channels):
             blocks.extend([
                 nn.Conv2d(in_ch, out_ch, kernel_size=3, padding=1),
                 nn.BatchNorm2d(out_ch),
                 nn.ReLU(),
-                nn.MaxPool2d(3, 3),
-                nn.Dropout2d(dropout),
             ])
+
+            if not self.last_layer_pooling and i < len(conv_channels) - 1:
+                blocks.append(nn.MaxPool2d(self.pooling[0], self.pooling[1]))
+
+            blocks.append(nn.Dropout2d(dropout))
             in_ch = out_ch
         return nn.Sequential(*blocks)
+
+    def mixup_dual(self, x1, x2, y):
+        lam = torch.distributions.Beta(self.mixup_alpha, self.mixup_alpha).sample().item()
+        idx = torch.randperm(x1.size(0), device=x1.device)
+
+        x1_mix = lam * x1 + (1 - lam) * x1[idx]
+        x2_mix = lam * x2 + (1 - lam) * x2[idx]
+
+        return x1_mix, x2_mix, y, y[idx], lam
 
     def forward(self, audio_ch1: torch.Tensor, audio_ch2: torch.Tensor, labels=None):
         # each input: (B, 1, TIME)
         mel1 = torch.log(self.mel_transform(audio_ch1) + 1e-6)  # (B, 1, mels, frames)
         mel2 = torch.log(self.mel_transform(audio_ch2) + 1e-6)
+
+        if self.spec_augment and self.training:
+            for freq_mask in self.freq_masks:
+                mel1 = freq_mask(mel1)
+                mel2 = freq_mask(mel2)
+            for time_mask in self.time_masks:
+                mel1 = time_mask(mel1)
+                mel2 = time_mask(mel2)
+
+        # mixup during training
+        if self.use_mixup and self.training and labels is not None:
+            mel1, mel2, y_a, y_b, lam = self.mixup_dual(mel1, mel2, labels)
 
         feat1 = self.global_pool(self.branch1(mel1)).flatten(1)
         feat2 = self.global_pool(self.branch2(mel2)).flatten(1)
