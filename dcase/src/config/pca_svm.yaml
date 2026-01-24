@@ -1,0 +1,19 @@
+model: SklearnAudioClassifier
+
+data:
+  base_data_path: "./data/dcase"
+  sample_rate: 44100
+  mono: true
+  batch_size: 64
+  n_workers: 4
+
+experiment:
+  n_label: 15
+
+network:
+  type: "pca_svm"
+  n_mels: 40
+  params:
+    n_components: 64
+    svm_C: 10.0
+    svm_kernel: "rbf"

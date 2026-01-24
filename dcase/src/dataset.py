@@ -14,7 +14,8 @@ class AcousticScenesDataset(torch.utils.data.Dataset):
             dataset_name: Literal['train', 'val', 'test'],
             sample_rate: int = 44100,
             mono: bool = True,
-            base_data_path: str = './data/dcase'
+            base_data_path: str = './data/dcase',
+            multi_stream: bool = False,
     ):
         cwdir = os.path.dirname(os.path.realpath(__file__))
         print(f'Current working directory: {cwdir}')
@@ -24,6 +25,13 @@ class AcousticScenesDataset(torch.utils.data.Dataset):
         self.data_path = os.path.join(base_data_path, dataset_name)
         self.sample_rate = sample_rate
         self.mono = mono
+        self.multi_stream = multi_stream
+
+        if multi_stream:
+            from preprocessing import MultiStreamPreprocessor
+            self.preprocessor = MultiStreamPreprocessor(sample_rate)
+            if mono:
+                raise ValueError("multi_stream requires mono=False")
 
         if dataset_name == 'test':
             self.meta_df = pd.read_csv(
@@ -63,18 +71,24 @@ class AcousticScenesDataset(torch.utils.data.Dataset):
         audio_data, audio_sample_rate = sf.read(
             self.data_path + '/' + example['audio_path'], dtype=np.float32
         )  # (SAMPLES, CHANNEL)
-        if self.mono:
-            audio_data = audio_data.mean(axis=-1, keepdims=True)  # (SAMPLES, CHANNEL=1)
-        if self.sample_rate is None or self.sample_rate == audio_sample_rate:
-            pass
-        else:
+
+        # resample if needed
+        if self.sample_rate is not None and self.sample_rate != audio_sample_rate:
             sr_ratio = Fraction(self.sample_rate, audio_sample_rate)
             audio_data = resample_poly(
                 audio_data, up=sr_ratio.numerator, down=sr_ratio.denominator, axis=0
-            )  # (SAMPLES, CHANNEL)
+            )
 
-        # convert to torch
-        example['audio_data'] = torch.from_numpy(audio_data.T)  # (CHANNEL, SAMPLES)
-        example['class_label'] = torch.tensor(example['class_label'])  # ()
+        if self.multi_stream:
+            # requires stereo input -- don't convert to mono
+            streams = self.preprocessor.process(torch.from_numpy(audio_data.T).float())
+            example['streams'] = streams
+            # still provide audio_data as stereo for compatibility
+            example['audio_data'] = torch.from_numpy(audio_data.T).float()
+        else:
+            if self.mono:
+                audio_data = audio_data.mean(axis=-1, keepdims=True)
+            example['audio_data'] = torch.from_numpy(audio_data.T).float()
 
+        example['class_label'] = torch.tensor(example['class_label'])
         return example

@@ -2,9 +2,10 @@ model: CNNModel
 
 data:
   sample_rate: 44100
-  mono: 1
   batch_size: 8
   n_workers: 16
+  mono: true
+  multi_stream: false
 
 experiment:
   learning_rate: 0.0001
@@ -13,7 +14,7 @@ experiment:
 
 network:
   n_fft: 2048
-  n_mels: 40
+  n_mels: 96
   dropout: 0.3
   f_min: 0
   f_max: 22050

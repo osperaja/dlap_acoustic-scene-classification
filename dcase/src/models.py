@@ -1,6 +1,14 @@
+import numpy as np
 import torch
 from torch import nn
 from torchaudio.transforms import MelSpectrogram
+from preprocessing import MultiStreamPreprocessor
+
+from sklearn.ensemble import RandomForestClassifier
+from sklearn.svm import SVC
+from sklearn.decomposition import PCA
+from sklearn.preprocessing import StandardScaler
+from sklearn.pipeline import Pipeline
 
 
 class BaselineModel(torch.nn.Module):
@@ -105,7 +113,6 @@ class LinSeqModel(torch.nn.Module):
             n_mels=n_mels,
         )
 
-        # SpecAugment: frequency and time masking
         if spec_augment:
             from torchaudio.transforms import FrequencyMasking, TimeMasking
             self.freq_masks = nn.ModuleList([
@@ -134,7 +141,6 @@ class LinSeqModel(torch.nn.Module):
 
         features = torch.log(self.mel_transform(audio_data) + 1e-6)  # (B, 1, n_mels, T)
 
-        # SpecAugment only during training
         if self.spec_augment and self.training:
             for freq_mask in self.freq_masks:
                 features = freq_mask(features)
@@ -146,6 +152,7 @@ class LinSeqModel(torch.nn.Module):
         logits = self.network(aggregated_features)
 
         return logits
+
 
 class CNNModel(torch.nn.Module):
     """
@@ -168,7 +175,7 @@ class CNNModel(torch.nn.Module):
             n_time_masks: int = 2,
             mixup_alpha: float = 0.2,
             use_mixup: bool = True,
-            conv_channels: list = None,  # e.g. [64, 128, 256]
+            conv_channels: list = None,
             classifier_hidden: int = 128,
     ):
         super(CNNModel, self).__init__()
@@ -203,13 +210,13 @@ class CNNModel(torch.nn.Module):
         in_channels = 1
         for out_channels in conv_channels:
             blocks.extend([
+                nn.BatchNorm2d(in_channels),
+                nn.ReLU(),
                 nn.Conv2d(in_channels, out_channels, kernel_size=3, padding=1),
                 nn.BatchNorm2d(out_channels),
                 nn.ReLU(),
                 nn.Conv2d(out_channels, out_channels, kernel_size=3, padding=1),
-                nn.BatchNorm2d(out_channels),
-                nn.ReLU(),
-                nn.MaxPool2d(2, 2),
+                nn.MaxPool2d(3, 3),
                 nn.Dropout2d(dropout),
             ])
             in_channels = out_channels
@@ -246,7 +253,7 @@ class CNNModel(torch.nn.Module):
             for time_mask in self.time_masks:
                 features = time_mask(features)
 
-        # Apply mixup during training
+        # mixup during training
         y_a, y_b, lam = None, None, None
         if self.use_mixup and self.training and labels is not None:
             features, y_a, y_b, lam = self.mixup_data(features, labels)
@@ -259,3 +266,196 @@ class CNNModel(torch.nn.Module):
         if self.training and y_a is not None:
             return {"logits": logits, "y_a": y_a, "y_b": y_b, "lam": lam}
         return {"logits": logits}
+
+
+class DualChannelCNNModel(torch.nn.Module):
+    """2-conv model from paper: processes 2 mel channels separately then concatenates."""
+
+    def __init__(self,
+                 sample_rate: int = 44100,
+                 n_fft: int = 2048,
+                 n_mels: int = 40,
+                 dropout: float = 0.3,
+                 n_label: int = 15,
+                 conv_channels: list = None,
+                 classifier_hidden: int = 1024,
+                 spec_augment=False,
+                 freq_mask_param=15,
+                 time_mask_param=20,
+                 n_freq_masks=2,
+                 n_time_masks=2,
+                 use_mixup=False,
+                 mixup_alpha=0.2,
+                 ):
+        super().__init__()
+
+        if conv_channels is None:
+            conv_channels = [32, 64, 128, 256]
+
+        self.mel_transform = MelSpectrogram(
+            sample_rate=sample_rate,
+            n_fft=n_fft,
+            n_mels=n_mels,
+        )
+
+        # two separate conv branches (one per channel)
+        self.branch1 = self._make_branch(conv_channels, dropout)
+        self.branch2 = self._make_branch(conv_channels, dropout)
+
+        self.global_pool = nn.AdaptiveAvgPool2d(1)
+
+        # concat both branches -> 2x final conv channels
+        self.classifier = nn.Sequential(
+            nn.Linear(conv_channels[-1] * 2, classifier_hidden),
+            nn.ReLU(),
+            nn.Dropout(dropout),
+            nn.Linear(classifier_hidden, n_label),
+        )
+
+    def _make_branch(self, conv_channels, dropout):
+        blocks = []
+        in_ch = 1
+        for out_ch in conv_channels:
+            blocks.extend([
+                nn.Conv2d(in_ch, out_ch, kernel_size=3, padding=1),
+                nn.BatchNorm2d(out_ch),
+                nn.ReLU(),
+                nn.MaxPool2d(3, 3),
+                nn.Dropout2d(dropout),
+            ])
+            in_ch = out_ch
+        return nn.Sequential(*blocks)
+
+    def forward(self, audio_ch1: torch.Tensor, audio_ch2: torch.Tensor, labels=None):
+        # each input: (B, 1, TIME)
+        mel1 = torch.log(self.mel_transform(audio_ch1) + 1e-6)  # (B, 1, mels, frames)
+        mel2 = torch.log(self.mel_transform(audio_ch2) + 1e-6)
+
+        feat1 = self.global_pool(self.branch1(mel1)).flatten(1)
+        feat2 = self.global_pool(self.branch2(mel2)).flatten(1)
+
+        combined = torch.cat([feat1, feat2], dim=1)
+        logits = self.classifier(combined)
+
+        return {"logits": logits}
+
+
+class EnsembleCNNModel(torch.nn.Module):
+    def __init__(self, base_model_config: dict):
+        super().__init__()
+
+        self.models = nn.ModuleDict({
+            'left': DualChannelCNNModel(**base_model_config),
+            'right': DualChannelCNNModel(**base_model_config),
+            'mid': DualChannelCNNModel(**base_model_config),
+            'side': DualChannelCNNModel(**base_model_config),
+            'harmonic': CNNModel(**base_model_config),
+            'percussive': CNNModel(**base_model_config),
+        })
+
+    def forward(self, audio_stereo: torch.Tensor, labels=None):
+        L = audio_stereo[:, 0:1, :]
+        R = audio_stereo[:, 1:2, :]
+        mid = (L + R) / 2
+        side = (L - R) / 2
+
+        all_logits = []
+        pairs = {
+            'left': (L, R),
+            'right': (R, L),
+            'mid': (mid, side),
+            'side': (side, mid),
+        }
+        for name, (stream1, stream2) in pairs.items():
+            out = self.models[name](stream1, stream2, labels)
+            all_logits.append(out['logits'])
+
+        return {'logits': torch.stack(all_logits).mean(dim=0)}
+
+
+class SklearnAudioClassifier:
+    """Wrapper for sklearn classifiers on mel spectrograms."""
+
+    def __init__(
+            self,
+            classifier_type: str = "random_forest",
+            sample_rate: int = 44100,
+            n_fft: int = 2048,
+            hop_length: int = 882,
+            n_mels: int = 40,
+            n_estimators: int = 500,
+            max_depth: int = 20,
+            n_components: int = 100,
+            svm_C: float = 10.0,
+            svm_kernel: str = "rbf",
+    ):
+        self.classifier_type = classifier_type
+        self.n_mels = n_mels
+
+        self.mel_transform = MelSpectrogram(
+            sample_rate=sample_rate,
+            n_fft=n_fft,
+            hop_length=hop_length,
+            n_mels=n_mels,
+        )
+
+        if classifier_type == "random_forest":
+            self.pipeline = Pipeline([
+                ("scaler", StandardScaler()),
+                ("clf", RandomForestClassifier(
+                    n_estimators=n_estimators,
+                    max_depth=max_depth,
+                    n_jobs=-1,
+                    random_state=42
+                ))
+            ])
+        elif classifier_type == "pca_svm":
+            self.pipeline = Pipeline([
+                ("scaler", StandardScaler()),
+                ("pca", PCA(n_components=n_components)),
+                ("clf", SVC(kernel=svm_kernel, C=svm_C))
+            ])
+        else:
+            raise ValueError(f"Unknown classifier: {classifier_type}")
+
+    def extract_features(self, audio_data: torch.Tensor) -> np.ndarray:
+        with torch.no_grad():
+            mel_spec = torch.log(self.mel_transform(audio_data) + 1e-6)
+            mel_spec = mel_spec.squeeze(1).numpy()
+
+        features = []
+        for spec in mel_spec:
+            feat = np.concatenate([
+                spec.mean(axis=1),
+                spec.std(axis=1),
+                spec.max(axis=1),
+                spec.min(axis=1),
+            ])
+            features.append(feat)
+        return np.array(features)
+
+    def fit(self, dataloader):
+        X_all, y_all = [], []
+        for batch in dataloader:
+            audio = batch['audio_data']
+            labels = batch['class_label'].numpy()
+            X_all.append(self.extract_features(audio))
+            y_all.append(labels)
+
+        X = np.vstack(X_all)
+        y = np.concatenate(y_all)
+        self.pipeline.fit(X, y)
+        return self
+
+    def score(self, dataloader):
+        X_all, y_all = [], []
+        for batch in dataloader:
+            audio = batch['audio_data']
+            labels = batch['class_label'].numpy()
+            X_all.append(self.extract_features(audio))
+            y_all.append(labels)
+
+        X = np.vstack(X_all)
+        y_true = np.concatenate(y_all)
+        y_pred = self.pipeline.predict(X)
+        return (y_pred == y_true).mean()

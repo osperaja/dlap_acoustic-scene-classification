@@ -41,7 +41,6 @@ class CNNExperiment(AcousticScenesExperiment):
 
         # Compute loss
         if stage == 'train' and "y_a" in output:
-            # Mixup loss
             loss = self.mixup_criterion(logits, output["y_a"], output["y_b"], output["lam"])
         else:
             loss = self.ce_loss(logits, target_label)

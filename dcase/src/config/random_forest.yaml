@@ -1,0 +1,18 @@
+model: SklearnAudioClassifier
+
+data:
+  base_data_path: "./data/dcase"
+  sample_rate: 44100
+  mono: true
+  batch_size: 64
+  n_workers: 4
+
+experiment:
+  n_label: 15
+
+network:
+  type: "random_forest"
+  n_mels: 40
+  params:
+    n_estimators: 500
+    max_depth: 20

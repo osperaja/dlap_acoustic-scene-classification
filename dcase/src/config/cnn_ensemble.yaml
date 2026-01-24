@@ -1,0 +1,40 @@
+model: EnsembleCNNModel
+
+data:
+  base_data_path: "./data/dcase"
+  sample_rate: 44100
+  mono: false
+  multi_stream: false
+  batch_size: 16
+  n_workers: 4
+
+experiment:
+  n_label: 15
+  max_epochs: 200
+  learning_rate: 0.0001
+
+network:
+  base_model_config:
+    sample_rate: 44100
+    n_mels: 40
+    dropout: 0.3
+    n_label: 15
+    spec_augment: true
+    use_mixup: true
+    conv_channels: [64, 128, 256]
+    classifier_hidden: 128
+    freq_mask_param: 15
+    time_mask_param: 20
+    n_freq_masks: 2
+    n_time_masks: 2
+    mixup_alpha: 0.2
+
+training:
+  max_epochs: 200
+  strategy: auto
+  accelerator: auto
+  devices: 1
+
+logging:
+  tb_log_dir: "./data/tb_logs/"
+  ckpt_dir: "./data/ckpts/"

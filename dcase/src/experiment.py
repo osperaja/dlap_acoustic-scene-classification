@@ -2,8 +2,6 @@ import pytorch_lightning as pl
 import torch
 from typing import Literal, Dict, Union
 
-from mpmath import monitor
-
 
 class AcousticScenesExperiment(pl.LightningModule):
     def __init__(
@@ -41,11 +39,14 @@ class AcousticScenesExperiment(pl.LightningModule):
 
     def configure_optimizers(self):
         optimizer = torch.optim.AdamW(self.parameters(), lr=self.learning_rate, weight_decay=1e-2)
-        scheduler = torch.optim.lr_scheduler.CosineAnnealingLR(optimizer, T_max=self.max_epochs)
+        scheduler = torch.optim.lr_scheduler.CosineAnnealingLR(
+            optimizer, T_max=self.max_epochs
+        )
         return {
             'optimizer': optimizer,
             'lr_scheduler': {
                 'scheduler': scheduler,
+                'monitor': 'val/loss',
                 'interval': 'epoch',
                 'frequency': 1,
             }

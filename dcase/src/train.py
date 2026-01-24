@@ -7,12 +7,12 @@ import yaml
 from torch.multiprocessing import set_start_method
 try:
     from .datamodule import AcousticScenesDatamodule as DM
-    from .models import BaselineModel, LinSeqModel, CNNModel
+    from .models import BaselineModel, LinSeqModel, CNNModel, EnsembleCNNModel
     from .baseline_experiment import BaselineExperiment as BLExp
     from .cnn_experiment import CNNExperiment as CNNExp
 except ImportError:
     from datamodule import AcousticScenesDatamodule as DM
-    from models import BaselineModel, LinSeqModel, CNNModel
+    from models import BaselineModel, LinSeqModel, CNNModel, EnsembleCNNModel
     from baseline_experiment import BaselineExperiment as BLExp
     from cnn_experiment import CNNExperiment as CNNExp
 
@@ -20,12 +20,14 @@ MODEL_REGISTRY = {
     'BaselineModel': BaselineModel,
     'LinSeqModel': LinSeqModel,
     'CNNModel': CNNModel,
+    "EnsembleCNNModel": EnsembleCNNModel,
 }
 
 EXPERIMENT_REGISTRY = {
     'BaselineModel': BLExp,
     'LinSeqModel': BLExp,
     'CNNModel': CNNExp,
+    'EnsembleCNNModel': CNNExp,
 }
 
 
@@ -89,11 +91,15 @@ if __name__ == "__main__":
     ModelClass = MODEL_REGISTRY[model_name]
     ExpClass = EXPERIMENT_REGISTRY[model_name]
 
-    config['network']['sample_rate'] = config['data']['sample_rate']
-    config['network']['n_label'] = config['experiment']['n_label']
+    # create model based on type
+    if model_name == 'EnsembleCNNModel':
+        model = ModelClass(base_model_config=config['network']['base_model_config'])
+    else:
+        config['network']['sample_rate'] = config['data']['sample_rate']
+        config['network']['n_label'] = config['experiment']['n_label']
+        model = ModelClass(**config['network'])
 
     dm = DM(**config['data'])
-    model = ModelClass(**config['network'])
     exp = ExpClass(model=model, **config['experiment'])
 
     exp_name = model_name.lower()
