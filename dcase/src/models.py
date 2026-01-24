@@ -169,29 +169,35 @@ class CNNModel(torch.nn.Module):
             n_mels: int = 40,
             dropout: float = 0.3,
             n_label: int = 15,
-            spec_augment: bool = True,
-            freq_mask_param: int = 15,
-            time_mask_param: int = 20,
-            n_freq_masks: int = 2,
-            n_time_masks: int = 2,
             pooling=[3, 3],
             last_layer_pooling=False,
-            mixup_alpha: float = 0.2,
-            use_mixup: bool = True,
-            conv_channels: list = None,
+            cnn_conv_channels: list = None,
             classifier_hidden: int = 128,
+            cnn_mixup_alpha: float = 0.2,
+            cnn_use_mixup: bool = True,
+            cnn_spec_augment: bool = True,
+            cnn_freq_mask_param: int = 15,
+            cnn_time_mask_param: int = 20,
+            cnn_n_freq_masks: int = 2,
+            cnn_n_time_masks: int = 2,
     ):
         super(CNNModel, self).__init__()
+        
+        self.conv_channels = cnn_conv_channels
 
-        if conv_channels is None:
-            conv_channels = [64, 128, 256]
+        if self.conv_channels is None:
+            self.conv_channels = [64, 128, 256]
 
-        self.spec_augment = spec_augment
         self.n_mels = n_mels
-        self.use_mixup = use_mixup
-        self.mixup_alpha = mixup_alpha
         self.last_layer_pooling = last_layer_pooling
         self.pooling = pooling
+        self.spec_augment = cnn_spec_augment
+        self.use_mixup = cnn_use_mixup
+        self.mixup_alpha = cnn_mixup_alpha
+        self.freq_mask_param = cnn_freq_mask_param
+        self.time_mask_param = cnn_time_mask_param
+        self.n_freq_masks = cnn_n_freq_masks
+        self.n_time_masks = cnn_n_time_masks
 
         self.mel_transform = MelSpectrogram(
             sample_rate=sample_rate,
@@ -201,19 +207,19 @@ class CNNModel(torch.nn.Module):
             n_mels=n_mels,
         )
 
-        if spec_augment:
+        if self.spec_augment:
             from torchaudio.transforms import FrequencyMasking, TimeMasking
             self.freq_masks = nn.ModuleList([
-                FrequencyMasking(freq_mask_param) for _ in range(n_freq_masks)
+                FrequencyMasking(self.freq_mask_param) for _ in range(self.n_freq_masks)
             ])
             self.time_masks = nn.ModuleList([
-                TimeMasking(time_mask_param) for _ in range(n_time_masks)
+                TimeMasking(self.time_mask_param) for _ in range(self.n_time_masks)
             ])
 
         # Build CNN blocks dynamically
         blocks = []
         in_channels = 1
-        for i, out_channels in enumerate(conv_channels):
+        for i, out_channels in enumerate(self.conv_channels):
             blocks.extend([
                 nn.BatchNorm2d(in_channels),
                 nn.ReLU(),
@@ -222,7 +228,7 @@ class CNNModel(torch.nn.Module):
                 nn.ReLU(),
                 nn.Conv2d(out_channels, out_channels, kernel_size=3, padding=1),
             ])
-            if not last_layer_pooling and i < len(conv_channels) - 1:
+            if not last_layer_pooling and i < len(self.conv_channels) - 1:
                 blocks.append(nn.MaxPool2d(self.pooling[0], self.pooling[1]))
             blocks.append(nn.Dropout2d(dropout))
             in_channels = out_channels
@@ -230,7 +236,7 @@ class CNNModel(torch.nn.Module):
         self.conv_blocks = nn.Sequential(*blocks)
         self.global_pool = nn.AdaptiveAvgPool2d(1)
         self.classifier = nn.Sequential(
-            nn.Linear(conv_channels[-1], classifier_hidden),
+            nn.Linear(self.conv_channels[-1], classifier_hidden),
             nn.ReLU(),
             nn.Dropout(dropout),
             nn.Linear(classifier_hidden, n_label),
@@ -285,26 +291,32 @@ class DualChannelCNNModel(torch.nn.Module):
                  n_label: int = 15,
                  pooling=[3, 3],
                  last_layer_pooling=False,
-                 conv_channels: list = None,
+                 dccnn_conv_channels: list = None,
                  classifier_hidden: int = 1024,
-                 spec_augment=False,
-                 freq_mask_param=15,
-                 time_mask_param=20,
-                 n_freq_masks=2,
-                 n_time_masks=2,
-                 use_mixup=False,
-                 mixup_alpha=0.2,
+                 dccnn_spec_augment=False,
+                 dccnn_freq_mask_param=15,
+                 dccnn_time_mask_param=20,
+                 dccnn_n_freq_masks=2,
+                 dccnn_n_time_masks=2,
+                 dccnn_use_mixup=False,
+                 dccnn_mixup_alpha=0.2,
                  ):
         super().__init__()
 
-        if conv_channels is None:
-            conv_channels = [32, 64, 128, 256]
+        self.conv_channels = dccnn_conv_channels
 
-        self.spec_augment = spec_augment
-        self.use_mixup = use_mixup
-        self.mixup_alpha = mixup_alpha
-        self.last_layer_pooling = last_layer_pooling
+        if self.conv_channels is None:
+            self.conv_channels = [32, 64, 128, 256]
+
         self.pooling = pooling
+        self.last_layer_pooling = last_layer_pooling
+        self.spec_augment = dccnn_spec_augment
+        self.use_mixup = dccnn_use_mixup
+        self.mixup_alpha = dccnn_mixup_alpha
+        self.freq_mask_param = dccnn_freq_mask_param
+        self.time_mask_param = dccnn_time_mask_param
+        self.n_freq_masks = dccnn_n_freq_masks
+        self.n_time_masks = dccnn_n_time_masks
 
         self.mel_transform = MelSpectrogram(
             sample_rate=sample_rate,
@@ -312,24 +324,24 @@ class DualChannelCNNModel(torch.nn.Module):
             n_mels=n_mels,
         )
 
-        if spec_augment:
+        if self.spec_augment:
             from torchaudio.transforms import FrequencyMasking, TimeMasking
             self.freq_masks = nn.ModuleList([
-                FrequencyMasking(freq_mask_param) for _ in range(n_freq_masks)
+                FrequencyMasking(self.freq_mask_param) for _ in range(self.n_freq_masks)
             ])
             self.time_masks = nn.ModuleList([
-                TimeMasking(time_mask_param) for _ in range(n_time_masks)
+                TimeMasking(self.time_mask_param) for _ in range(self.n_time_masks)
             ])
 
         # two separate conv branches (one per channel)
-        self.branch1 = self._make_branch(conv_channels, dropout)
-        self.branch2 = self._make_branch(conv_channels, dropout)
+        self.branch1 = self._make_branch(self.conv_channels, dropout)
+        self.branch2 = self._make_branch(self.conv_channels, dropout)
 
         self.global_pool = nn.AdaptiveAvgPool2d(1)
 
         # concat both branches -> 2x final conv channels
         self.classifier = nn.Sequential(
-            nn.Linear(conv_channels[-1] * 2, classifier_hidden),
+            nn.Linear(self.conv_channels[-1] * 2, classifier_hidden),
             nn.ReLU(),
             nn.Dropout(dropout),
             nn.Linear(classifier_hidden, n_label),
@@ -388,33 +400,59 @@ class DualChannelCNNModel(torch.nn.Module):
 
 
 class EnsembleCNNModel(torch.nn.Module):
-    def __init__(self, base_model_config: dict):
+    def __init__(self, cnn_config: dict, dccnn_config: dict, sample_rate: int = 44100):
         super().__init__()
 
+        self.preprocessor = MultiStreamPreprocessor(sample_rate=sample_rate)
+
         self.models = nn.ModuleDict({
-            'left': DualChannelCNNModel(**base_model_config),
-            'right': DualChannelCNNModel(**base_model_config),
-            'mid': DualChannelCNNModel(**base_model_config),
-            'side': DualChannelCNNModel(**base_model_config),
-            'harmonic': CNNModel(**base_model_config),
-            'percussive': CNNModel(**base_model_config),
+            'left': DualChannelCNNModel(**dccnn_config),
+            'right': DualChannelCNNModel(**dccnn_config),
+            'mid': DualChannelCNNModel(**dccnn_config),
+            'side': DualChannelCNNModel(**dccnn_config),
+            'harmonic': CNNModel(**cnn_config),
+            'percussive': CNNModel(**cnn_config),
         })
 
     def forward(self, audio_stereo: torch.Tensor, labels=None):
-        L = audio_stereo[:, 0:1, :]
-        R = audio_stereo[:, 1:2, :]
-        mid = (L + R) / 2
-        side = (L - R) / 2
+        # audio_stereo: (B, 2, TIME) or dict from dataset
+        
+        if isinstance(audio_stereo, dict) and 'streams' in audio_stereo:
+            batch_streams = audio_stereo['streams']
+        else:
+            # process each sample in the batch through the preprocessor
+            batch_size = audio_stereo.shape[0]
+            
+            batch_streams = {
+                'left': [], 'right': [], 'mid': [], 'side': [], 'harmonic': [], 'percussive': []
+            }
+            
+            for i in range(batch_size):
+                streams = self.preprocessor.process(audio_stereo[i])
+                for k, v in streams.items():
+                    batch_streams[k].append(v)
+            
+            # Stack back to (B, 1, TIME)
+            for k in batch_streams:
+                batch_streams[k] = torch.stack(batch_streams[k])
 
         all_logits = []
+        
+        # 1. Dual Channel models (require 2 inputs)
         pairs = {
-            'left': (L, R),
-            'right': (R, L),
-            'mid': (mid, side),
-            'side': (side, mid),
+            'left': (batch_streams['left'], batch_streams['right']),
+            'right': (batch_streams['right'], batch_streams['left']),
+            'mid': (batch_streams['mid'], batch_streams['side']),
+            'side': (batch_streams['side'], batch_streams['mid']),
         }
-        for name, (stream1, stream2) in pairs.items():
-            out = self.models[name](stream1, stream2, labels)
+        
+        for name, (s1, s2) in pairs.items():
+            out = self.models[name](s1, s2, labels)
+            all_logits.append(out['logits'])
+            
+        # 2. Single Channel models
+        for name in ['harmonic', 'percussive']:
+            out = self.models[name](batch_streams[name], labels)
             all_logits.append(out['logits'])
 
         return {'logits': torch.stack(all_logits).mean(dim=0)}

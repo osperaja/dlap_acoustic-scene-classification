@@ -101,7 +101,11 @@ if __name__ == "__main__":
 
     # create model based on type
     if model_name == 'EnsembleCNNModel':
-        model = ModelClass(base_model_config=config['network']['base_model_config'])
+        model = ModelClass(
+            cnn_config=config['network']['cnn_config'],
+            dccnn_config=config['network']['dccnn_config'],
+            sample_rate=config['data']['sample_rate']
+        )
     else:
         config['network']['sample_rate'] = config['data']['sample_rate']
         config['network']['n_label'] = config['experiment']['n_label']

@@ -29,12 +29,17 @@ class CNNExperiment(AcousticScenesExperiment):
         return lam * self.ce_loss(logits, y_a) + (1 - lam) * self.ce_loss(logits, y_b)
 
     def shared_step(self, batch, batch_idx, stage: Literal['train', 'val', 'test']):
-        audio_data = batch['audio_data'].to(device=self.device)  # (BATCH, CHANNEL, TIME)
         target_label = batch['class_label'].to(device=self.device)  # (BATCH)
 
         # Forward model - pass labels for mixup during training
         labels_for_mixup = target_label if stage == 'train' else None
-        output = self.model(audio_data, labels_for_mixup)
+        
+        if 'streams' in batch:
+            # Pass the streams dict directly if it exists (from multi_stream dataset)
+            output = self.model(batch, labels_for_mixup)
+        else:
+            audio_data = batch['audio_data'].to(device=self.device)  # (BATCH, CHANNEL, TIME)
+            output = self.model(audio_data, labels_for_mixup)
 
         # Handle dict output from CNNModel
         logits = output["logits"]  # (BATCH, n_label)

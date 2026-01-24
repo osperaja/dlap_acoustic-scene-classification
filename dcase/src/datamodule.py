@@ -73,8 +73,10 @@ def collate_fn(
             [sample[key] for sample in batch], dim=0
         )
         if isinstance(value, torch.Tensor) else
-        [
-            sample[key] for sample in batch
-        ]
+        (
+            {k: torch.stack([sample[key][k] for sample in batch], dim=0) for k in value.keys()}
+            if isinstance(value, dict) else
+            [sample[key] for sample in batch]
+        )
         for key, value in batch[0].items()
     }
