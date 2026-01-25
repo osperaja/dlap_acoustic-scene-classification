@@ -1,28 +1,30 @@
-import pickle
-
-import yaml
 import argparse
+import os
+import pickle
+from datetime import datetime
+
+import numpy as np
+import yaml
+from sklearn.linear_model import LogisticRegression
 from torch.utils.data import DataLoader
 from tqdm import tqdm
-import numpy as np
 from sklearn.metrics import classification_report, confusion_matrix
 import matplotlib.pyplot as plt
 import seaborn as sns
 
-import os
-import joblib
-from datetime import datetime
-
 try:
-    from .models import SklearnAudioClassifier, HierarchicalClassifier
-    from .dataset import AcousticScenesDataset
-except ImportError:
-    from models import SklearnAudioClassifier, HierarchicalClassifier
+    from models import SklearnAudioClassifier, SklearnAudioEnsembleClassifier
     from dataset import AcousticScenesDataset
+except ImportError:
+    from .models import SklearnAudioClassifier, SklearnAudioEnsembleClassifier
+    from .dataset import AcousticScenesDataset
 
+def build_final_estimator(cfg):
+    if cfg["type"] == "logistic_regression":
+        return LogisticRegression(**cfg.get("params", {}))
+    raise ValueError(f"Unknown final_estimator type: {cfg['type']}")
 
 def extract_all_features(model, dataloader, desc="Extracting features"):
-    """Extract features with progress bar."""
     X_all, y_all = [], []
     for batch in tqdm(dataloader, desc=desc):
         audio = batch['audio_data']
@@ -31,9 +33,7 @@ def extract_all_features(model, dataloader, desc="Extracting features"):
         y_all.append(labels)
     return np.vstack(X_all), np.concatenate(y_all)
 
-
 def plot_confusion_matrix(y_true, y_pred, class_names, save_path=None):
-    """Plot and optionally save confusion matrix."""
     cm = confusion_matrix(y_true, y_pred)
     plt.figure(figsize=(12, 10))
     sns.heatmap(cm, annot=True, fmt='d', cmap='Blues',
@@ -47,6 +47,13 @@ def plot_confusion_matrix(y_true, y_pred, class_names, save_path=None):
         print(f"saved conf matrix to {save_path}")
     plt.show()
 
+def build_base_classifier(cfg, global_config):
+    return SklearnAudioClassifier(
+        classifier_type=cfg["name"],
+        sample_rate=global_config["data"]["sample_rate"],
+        n_mels=cfg.get("n_mels", 40),
+        **cfg.get("params", {})
+    )
 
 def main():
     parser = argparse.ArgumentParser()
@@ -57,10 +64,9 @@ def main():
         config = yaml.safe_load(f)
 
     print("=" * 50)
-    print(f"Training: {config['network']['type']}")
+    print(f"Training: {config['model']}")
     print("=" * 50)
 
-    # Load datasets
     train_dataset = AcousticScenesDataset(
         dataset_name="train",
         sample_rate=config["data"]["sample_rate"],
@@ -86,27 +92,48 @@ def main():
     ckpt_dir = config.get("logging", {}).get("ckpt_dir", "./data/ckpts/sklearn/")
     os.makedirs(ckpt_dir, exist_ok=True)
 
-    model = SklearnAudioClassifier(
-        classifier_type=config["network"]["type"],
-        sample_rate=config["data"]["sample_rate"],
-        n_mels=config["network"]["n_mels"],
-        **config["network"].get("params", {})
-    )
+    if config["model"] == "SklearnAudioEnsembleClassifier":
+        base_classifiers = config["ensemble"]["base_classifiers"]
+        final_estimator = None
+        if config["ensemble"]["type"] == "stacking":
+            final_estimator = config["ensemble"]["final_estimator"]
+        model = SklearnAudioEnsembleClassifier(
+            base_classifiers=base_classifiers,
+            final_estimator=final_estimator,
+            ensemble_type=config["ensemble"]["type"],
+        )
+    else:
+        model = SklearnAudioClassifier(
+            classifier_type=config["network"]["type"],
+            sample_rate=config["data"]["sample_rate"],
+            n_mels=config["network"]["n_mels"],
+            **config["network"].get("params", {})
+        )
 
-    print("\n[1/3] extracting training features..")
-    X_train, y_train = extract_all_features(model, train_loader, "Train")
+    print("\nModel:")
+    print(model)
+    if hasattr(model, "pipeline"):
+        print("\nPipeline:")
+        print(model.pipeline)
+        print("\nPipeline params:")
+        print(model.pipeline.get_params())
+    elif hasattr(model, "get_params"):
+        print("\nParams:")
+        print(model.get_params())
 
-    print("\n[2/3] fitting..")
-    model.pipeline.fit(X_train, y_train)
+    model.fit(dataloader=train_loader)
 
-    print("\n[3/3] eval..")
-    X_val, y_val = extract_all_features(model, val_loader, "Val")
+    print("Predicting training set:\n")
+    train_acc = model.score(train_loader)
 
-    train_acc = (model.pipeline.predict(X_train) == y_train).mean()
-    val_pred = model.pipeline.predict(X_val)
-    val_acc = (val_pred == y_val).mean()
+    print(f"Train accuracy: {train_acc:.3f}")
 
-    # res
+    print("Predicting validation set:\n")
+    val_acc = model.score(val_loader)
+    val_pred, y_val = model.predict(val_loader)
+
+    print(f"Validation accuracy: {val_acc:.3f}")
+
     print("\n" + "=" * 50)
     print("results:")
     print("=" * 50)
@@ -122,17 +149,12 @@ def main():
                           save_path=config.get("logging", {}).get("cm_path"))
 
     timestamp = datetime.now().strftime("%Y%m%d_%H%M%S")
-    model_name = f"{config['network']['type']}_{timestamp}-val_acc={val_acc:.2f}"
+    model_name = f"{config['model']}_{timestamp}-val_acc={val_acc:.2f}"
     ckpt_path = os.path.join(ckpt_dir, f"{model_name}.ckpt")
 
     with open(ckpt_path, 'wb') as f:
         pickle.dump({
-            'pipeline': model.pipeline,
-            'mel_transform_config': {
-                'sample_rate': config["data"]["sample_rate"],
-                'n_mels': config["network"]["n_mels"],
-            },
-            'classifier_type': config['network']['type'],
+            'model': model,
             'val_accuracy': val_acc,
             'config': config,
         }, f)

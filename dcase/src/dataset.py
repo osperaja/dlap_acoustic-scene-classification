@@ -17,8 +17,6 @@ class AcousticScenesDataset(torch.utils.data.Dataset):
             base_data_path: str = './data/dcase',
             multi_stream: bool = False,
     ):
-        cwdir = os.path.dirname(os.path.realpath(__file__))
-        print(f'Current working directory: {cwdir}')
         super(AcousticScenesDataset, self).__init__()
 
         # initialize attributes
@@ -29,7 +27,10 @@ class AcousticScenesDataset(torch.utils.data.Dataset):
 
         if multi_stream:
             from preprocessing import MultiStreamPreprocessor
-            self.preprocessor = MultiStreamPreprocessor(sample_rate)
+            self.preprocessor = MultiStreamPreprocessor(
+                sample_rate,
+                cache_dir=os.path.join(base_data_path, "preprocessed_features")
+            )
             if mono:
                 raise ValueError("multi_stream requires mono=False")
 
@@ -80,11 +81,12 @@ class AcousticScenesDataset(torch.utils.data.Dataset):
             )
 
         if self.multi_stream:
-            # requires stereo input -- don't convert to mono
-            streams = self.preprocessor.process(torch.from_numpy(audio_data.T).float())
+            key = os.path.splitext(os.path.basename(example['audio_path']))[0]
+            streams = self.preprocessor.process(
+                torch.from_numpy(audio_data.T).float(),
+                cache_key=key
+            )
             example['streams'] = streams
-            # still provide audio_data as stereo for compatibility
-            example['audio_data'] = torch.from_numpy(audio_data.T).float()
         else:
             if self.mono:
                 audio_data = audio_data.mean(axis=-1, keepdims=True)

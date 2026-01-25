@@ -1,15 +1,19 @@
 import numpy as np
 import torch
+from sklearn.linear_model import LogisticRegression
 from torch import nn
 from torch.nn.modules import pooling
 from torchaudio.transforms import MelSpectrogram
+from tqdm import tqdm
+
 from preprocessing import MultiStreamPreprocessor
 
-from sklearn.ensemble import RandomForestClassifier
+from sklearn.ensemble import RandomForestClassifier, StackingClassifier, VotingClassifier
 from sklearn.svm import SVC
 from sklearn.decomposition import PCA
 from sklearn.preprocessing import StandardScaler
 from sklearn.pipeline import Pipeline
+from sklearn.base import BaseEstimator, ClassifierMixin
 
 
 class BaselineModel(torch.nn.Module):
@@ -182,7 +186,7 @@ class CNNModel(torch.nn.Module):
             cnn_n_time_masks: int = 2,
     ):
         super(CNNModel, self).__init__()
-        
+
         self.conv_channels = cnn_conv_channels
 
         if self.conv_channels is None:
@@ -228,7 +232,7 @@ class CNNModel(torch.nn.Module):
                 nn.ReLU(),
                 nn.Conv2d(out_channels, out_channels, kernel_size=3, padding=1),
             ])
-            if not last_layer_pooling and i < len(self.conv_channels) - 1:
+            if i == len(self.conv_channels) - 1 and self.last_layer_pooling:
                 blocks.append(nn.MaxPool2d(self.pooling[0], self.pooling[1]))
             blocks.append(nn.Dropout2d(dropout))
             in_channels = out_channels
@@ -357,7 +361,7 @@ class DualChannelCNNModel(torch.nn.Module):
                 nn.ReLU(),
             ])
 
-            if not self.last_layer_pooling and i < len(conv_channels) - 1:
+            if i < len(conv_channels) - 1 or self.last_layer_pooling:
                 blocks.append(nn.MaxPool2d(self.pooling[0], self.pooling[1]))
 
             blocks.append(nn.Dropout2d(dropout))
@@ -416,28 +420,14 @@ class EnsembleCNNModel(torch.nn.Module):
 
     def forward(self, audio_stereo: torch.Tensor, labels=None):
         # audio_stereo: (B, 2, TIME) or dict from dataset
-        
+
         if isinstance(audio_stereo, dict) and 'streams' in audio_stereo:
             batch_streams = audio_stereo['streams']
         else:
-            # process each sample in the batch through the preprocessor
-            batch_size = audio_stereo.shape[0]
-            
-            batch_streams = {
-                'left': [], 'right': [], 'mid': [], 'side': [], 'harmonic': [], 'percussive': []
-            }
-            
-            for i in range(batch_size):
-                streams = self.preprocessor.process(audio_stereo[i])
-                for k, v in streams.items():
-                    batch_streams[k].append(v)
-            
-            # Stack back to (B, 1, TIME)
-            for k in batch_streams:
-                batch_streams[k] = torch.stack(batch_streams[k])
+            raise RuntimeError("multi_stream forward expects precomputed 'streams'")
 
         all_logits = []
-        
+
         # 1. Dual Channel models (require 2 inputs)
         pairs = {
             'left': (batch_streams['left'], batch_streams['right']),
@@ -445,11 +435,11 @@ class EnsembleCNNModel(torch.nn.Module):
             'mid': (batch_streams['mid'], batch_streams['side']),
             'side': (batch_streams['side'], batch_streams['mid']),
         }
-        
+
         for name, (s1, s2) in pairs.items():
             out = self.models[name](s1, s2, labels)
             all_logits.append(out['logits'])
-            
+
         # 2. Single Channel models
         for name in ['harmonic', 'percussive']:
             out = self.models[name](batch_streams[name], labels)
@@ -521,7 +511,7 @@ class SklearnAudioClassifier:
 
     def fit(self, dataloader):
         X_all, y_all = [], []
-        for batch in dataloader:
+        for batch in tqdm(dataloader, desc="Fitting classifier"):
             audio = batch['audio_data']
             labels = batch['class_label'].numpy()
             X_all.append(self.extract_features(audio))
@@ -532,15 +522,118 @@ class SklearnAudioClassifier:
         self.pipeline.fit(X, y)
         return self
 
+    def predict(self, dataloader):
+        X_all, y_all = [], []
+        for batch in tqdm(dataloader, desc="Predicting"):
+            audio = batch['audio_data']
+            labels = batch['class_label'].numpy()
+            X_all.append(self.extract_features(audio))
+            y_all.append(labels)
+        X = np.vstack(X_all)
+        y_true = np.concatenate(y_all)
+        y_pred = self.pipeline.predict(X)
+        return y_pred, y_true
+
     def score(self, dataloader):
+        y_pred, y_true = self.predict(dataloader)
+        return (y_pred == y_true).mean()
+
+
+class SklearnAudioEnsembleClassifier(BaseEstimator, ClassifierMixin):
+    def __init__(
+            self,
+            base_classifiers=None,
+            final_estimator=None,
+            n_mels=40,
+            sample_rate=44100,
+            n_fft=2048,
+            hop_length=882,
+            ensemble_type="stacking",
+    ):
+        self.base_classifiers = base_classifiers
+        self.final_estimator = final_estimator
+        self.n_mels = n_mels
+        self.sample_rate = sample_rate
+        self.n_fft = n_fft
+        self.hop_length = hop_length
+        self.mel_transform = None
+        self.ensemble_type = ensemble_type
+        self.mel_transform = MelSpectrogram(
+            sample_rate=self.sample_rate,
+            n_fft=self.n_fft,
+            hop_length=self.hop_length,
+            n_mels=self.n_mels,
+        )
+
+    def fit(self, dataloader):
         X_all, y_all = [], []
         for batch in dataloader:
             audio = batch['audio_data']
             labels = batch['class_label'].numpy()
             X_all.append(self.extract_features(audio))
             y_all.append(labels)
+        X = np.vstack(X_all)
+        y = np.concatenate(y_all)
 
+        estimators = []
+        for clf_cfg in self.base_classifiers:
+            name = clf_cfg['name']
+            params = clf_cfg['params']
+            if name == "random_forest":
+                clf = RandomForestClassifier(**params)
+            elif name == "pca_svm":
+                clf = Pipeline([
+                    ("scaler", StandardScaler()),
+                    ("pca", PCA(n_components=params['n_components'])),
+                    ("clf", SVC(kernel=params['svm_kernel'], C=params['svm_C']))
+                ])
+            else:
+                raise ValueError(f"Unknown classifier: {name}")
+            estimators.append((name, clf))
+
+        if self.ensemble_type == "stacking":
+            self.ensemble = StackingClassifier(
+                estimators=estimators,
+                final_estimator=LogisticRegression(**self.final_estimator['params'])
+            )
+        elif self.ensemble_type == "voting":
+            self.ensemble = VotingClassifier(
+                estimators=estimators,
+                voting='hard'
+            )
+        else:
+            raise ValueError(f"Unknown ensemble_type: {self.ensemble_type}")
+
+        self.ensemble.fit(X, y)
+        return self
+
+    def extract_features(self, audio_data: torch.Tensor) -> np.ndarray:
+        with torch.no_grad():
+            mel_spec = torch.log(self.mel_transform(audio_data) + 1e-6)
+            mel_spec = mel_spec.squeeze(1).numpy()
+        features = []
+        for spec in mel_spec:
+            feat = np.concatenate([
+                spec.mean(axis=1),
+                spec.std(axis=1),
+                spec.max(axis=1),
+                spec.min(axis=1),
+            ])
+            features.append(feat)
+        return np.array(features)
+
+    def predict(self, dataloader):
+        X_all, y_all = [], []
+        for batch in tqdm(dataloader, desc="Predicting"):
+            audio = batch['audio_data']
+            labels = batch['class_label'].numpy()
+            X_all.append(self.extract_features(audio))
+            y_all.append(labels)
         X = np.vstack(X_all)
         y_true = np.concatenate(y_all)
-        y_pred = self.pipeline.predict(X)
+        y_pred = self.ensemble.predict(X)
+        return y_pred, y_true
+
+    def score(self, dataloader):
+        y_pred, y_true = self.predict(dataloader)
         return (y_pred == y_true).mean()

@@ -38,7 +38,7 @@ class AcousticScenesExperiment(pl.LightningModule):
         return self.shared_step(batch, batch_idx, stage='val')
 
     def configure_optimizers(self):
-        optimizer = torch.optim.AdamW(self.parameters(), lr=self.learning_rate, weight_decay=1e-2)
+        optimizer = torch.optim.AdamW(self.parameters(), lr=self.learning_rate, weight_decay=1e-3)
         scheduler = torch.optim.lr_scheduler.CosineAnnealingLR(
             optimizer, T_max=self.max_epochs
         )

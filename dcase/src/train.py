@@ -20,7 +20,7 @@ MODEL_REGISTRY = {
     'BaselineModel': BaselineModel,
     'LinSeqModel': LinSeqModel,
     'CNNModel': CNNModel,
-    "EnsembleCNNModel": EnsembleCNNModel,
+    'EnsembleCNNModel': EnsembleCNNModel,
 }
 
 EXPERIMENT_REGISTRY = {
@@ -68,9 +68,9 @@ def get_trainer(devices, logger, max_epochs, strategy, accelerator, ckpt_dir):
         filename='epoch={epoch}-val_acc={val/accuracy:.2f}'
     )
     early_stop = DelayedStartEarlyStopping( # https://github.com/Lightning-AI/pytorch-lightning/issues/16881, https://github.com/samgelman
-        start_epoch=50,
+        start_epoch=1,
         monitor="val/accuracy",
-        patience=10,
+        patience=15,
         mode="max",
         verbose=True
     )
@@ -81,7 +81,7 @@ def get_trainer(devices, logger, max_epochs, strategy, accelerator, ckpt_dir):
         max_epochs=max_epochs,
         strategy=strategy,
         accelerator=accelerator,
-        callbacks=[checkpoint_callback, ModelSummary(max_depth=2), early_stop],
+        callbacks=[checkpoint_callback, ModelSummary(max_depth=5), early_stop],
     )
 
 

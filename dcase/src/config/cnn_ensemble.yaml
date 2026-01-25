@@ -11,7 +11,7 @@ data:
 experiment:
   n_label: 15
   max_epochs: 200
-  learning_rate: 0.0001
+  learning_rate: 0.002
 
 network:
   cnn_config:
@@ -22,7 +22,7 @@ network:
     pooling: [ 2,2 ]
     cnn_conv_channels: [ 64, 128, 256 ]
     classifier_hidden: 128
-    cnn_spec_augment: true
+    cnn_spec_augment: false
     cnn_use_mixup: false
     cnn_freq_mask_param: 4
     cnn_time_mask_param: 6
@@ -44,7 +44,7 @@ network:
     dccnn_time_mask_param: 6
     dccnn_n_freq_masks: 1
     dccnn_n_time_masks: 1
-    dccnn_mixup_alpha: 0.05
+    dccnn_mixup_alpha: 0.1
 
 training:
   max_epochs: 200

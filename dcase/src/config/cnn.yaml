@@ -6,6 +6,7 @@ data:
   n_workers: 16
   mono: true
   multi_stream: false
+  base_data_path: './data/dcase'
 
 experiment:
   learning_rate: 0.0001
