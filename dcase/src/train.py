@@ -70,7 +70,7 @@ def get_trainer(devices, logger, max_epochs, strategy, accelerator, ckpt_dir):
     early_stop = DelayedStartEarlyStopping( # https://github.com/Lightning-AI/pytorch-lightning/issues/16881, https://github.com/samgelman
         start_epoch=1,
         monitor="val/accuracy",
-        patience=15,
+        patience=50,
         mode="max",
         verbose=True
     )
