@@ -232,7 +232,7 @@ class CNNModel(torch.nn.Module):
                 nn.ReLU(),
                 nn.Conv2d(out_channels, out_channels, kernel_size=3, padding=1),
             ])
-            if i == len(self.conv_channels) - 1 and self.last_layer_pooling:
+            if i < len(self.conv_channels) - 1 or self.last_layer_pooling:
                 blocks.append(nn.MaxPool2d(self.pooling[0], self.pooling[1]))
             blocks.append(nn.Dropout2d(dropout))
             in_channels = out_channels
@@ -356,12 +356,12 @@ class DualChannelCNNModel(torch.nn.Module):
         in_ch = 1
         for i, out_ch in enumerate(conv_channels):
             blocks.extend([
-                nn.Conv2d(in_ch, out_ch, kernel_size=3, padding=1),
-                nn.BatchNorm2d(out_ch),
+                nn.BatchNorm2d(in_ch),
                 nn.ReLU(),
+                nn.Conv2d(in_ch, out_ch, kernel_size=3, padding=1),
             ])
 
-            if i < len(conv_channels) - 1 or self.last_layer_pooling:
+            if i < len(self.conv_channels) - 1 or self.last_layer_pooling:
                 blocks.append(nn.MaxPool2d(self.pooling[0], self.pooling[1]))
 
             blocks.append(nn.Dropout2d(dropout))
