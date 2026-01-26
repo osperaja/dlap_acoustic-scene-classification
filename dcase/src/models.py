@@ -416,6 +416,8 @@ class EnsembleCNNModel(torch.nn.Module):
             'side': DualChannelCNNModel(**dccnn_config),
             'harmonic': CNNModel(**cnn_config),
             'percussive': CNNModel(**cnn_config),
+            'background': CNNModel(**cnn_config),
+            'foreground': CNNModel(**cnn_config)
         })
 
     def forward(self, audio_stereo: torch.Tensor, labels=None):
@@ -441,7 +443,7 @@ class EnsembleCNNModel(torch.nn.Module):
             all_logits.append(out['logits'])
 
         # 2. Single Channel models
-        for name in ['harmonic', 'percussive']:
+        for name in ['harmonic', 'percussive', 'background', 'foreground']:
             out = self.models[name](batch_streams[name], labels)
             all_logits.append(out['logits'])
 

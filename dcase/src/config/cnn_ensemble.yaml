@@ -5,7 +5,7 @@ data:
   sample_rate: 44100
   mono: false
   multi_stream: true
-  batch_size: 38
+  batch_size: 26
   n_workers: 8
 
 experiment:
@@ -16,18 +16,18 @@ experiment:
 network:
   cnn_config:
     n_label: 15
-    n_mels: 128
+    n_mels: 86
     dropout: 0.0
     last_layer_pooling: false
     pooling: [ 2,2 ]
     cnn_conv_channels: [ 32, 64, 128, 256 ]
-    classifier_hidden: 1024
+    classifier_hidden: 512
     cnn_spec_augment: true
     cnn_use_mixup: true
-    cnn_freq_mask_param: 8
-    cnn_time_mask_param: 12
-    cnn_n_freq_masks: 2
-    cnn_n_time_masks: 2
+    cnn_freq_mask_param: 10
+    cnn_time_mask_param: 20
+    cnn_n_freq_masks: 1
+    cnn_n_time_masks: 1
     cnn_mixup_alpha: 0.05
 
   dccnn_config:
@@ -37,13 +37,13 @@ network:
     last_layer_pooling: false
     pooling: [ 2,2 ]
     dccnn_conv_channels: [ 32, 64, 128, 256 ]
-    classifier_hidden: 1024
+    classifier_hidden: 512
     dccnn_spec_augment: true
     dccnn_use_mixup: true
-    dccnn_freq_mask_param: 8
-    dccnn_time_mask_param: 12
-    dccnn_n_freq_masks: 2
-    dccnn_n_time_masks: 2
+    dccnn_freq_mask_param: 10
+    dccnn_time_mask_param: 20
+    dccnn_n_freq_masks: 1
+    dccnn_n_time_masks: 1
     dccnn_mixup_alpha: 0.05
 
 training:

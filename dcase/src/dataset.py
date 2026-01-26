@@ -82,10 +82,7 @@ class AcousticScenesDataset(torch.utils.data.Dataset):
 
         if self.multi_stream:
             key = os.path.splitext(os.path.basename(example['audio_path']))[0]
-            streams = self.preprocessor.process(
-                torch.from_numpy(audio_data.T).float(),
-                cache_key=key
-            )
+            streams = self.preprocessor.process(torch.from_numpy(audio_data.T).float(), cache_key=key)
             example['streams'] = streams
         else:
             if self.mono:
