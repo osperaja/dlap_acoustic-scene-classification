@@ -420,6 +420,8 @@ class EnsembleCNNModel(torch.nn.Module):
             'foreground': CNNModel(**cnn_config)
         })
 
+        self.ensemble_weights = nn.Parameter(torch.ones(len(self.models)))
+
     def forward(self, audio_stereo: torch.Tensor, labels=None):
         # audio_stereo: (B, 2, TIME) or dict from dataset
 
@@ -447,7 +449,10 @@ class EnsembleCNNModel(torch.nn.Module):
             out = self.models[name](batch_streams[name], labels)
             all_logits.append(out['logits'])
 
-        return {'logits': torch.stack(all_logits).mean(dim=0)}
+        logits_stack = torch.stack(all_logits)  # (num_models, B, num_classes)
+        weights = torch.softmax(self.ensemble_weights, dim=0)  # (num_models,)
+        weighted_logits = logits_stack * weights[:, None, None]
+        return {'logits': weighted_logits.sum(dim=0)} # WEIGH MODELS
 
 
 class SklearnAudioClassifier:
