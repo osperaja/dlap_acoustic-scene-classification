@@ -11,7 +11,7 @@ class MultiStreamPreprocessor:
             self,
             sample_rate: int = 44100,
             cache_dir: str = None,
-            use_fast_hpss: bool = True,
+            use_fast_hpss: bool = False,
             hpss_kernel_size: int = 1024,
             hpss_stride: int = 256,
     ):
@@ -33,7 +33,7 @@ class MultiStreamPreprocessor:
         if self.cache_dir and cache_key:
             cache_path = os.path.join(self.cache_dir, f"{cache_key}_streams.pt")
             if os.path.exists(cache_path):
-                cached = torch.load(cache_path, map_location=device)
+                cached = torch.load(cache_path, map_location=device, weights_only=True)
                 return {k: v.to(device) for k, v in cached.items()}
 
         L = audio_stereo[0:1]

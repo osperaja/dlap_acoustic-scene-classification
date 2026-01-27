@@ -226,10 +226,10 @@ class CNNModel(torch.nn.Module):
         for i, out_channels in enumerate(self.conv_channels):
             blocks.extend([
                 nn.BatchNorm2d(in_channels),
-                nn.ReLU(),
+                nn.LeakyReLU(0.33),
                 nn.Conv2d(in_channels, out_channels, kernel_size=3, padding=1),
                 nn.BatchNorm2d(out_channels),
-                nn.ReLU(),
+                nn.LeakyReLU(0.33),
                 nn.Conv2d(out_channels, out_channels, kernel_size=3, padding=1),
             ])
             if i < len(self.conv_channels) - 1 or self.last_layer_pooling:
@@ -241,8 +241,8 @@ class CNNModel(torch.nn.Module):
         self.global_pool = nn.AdaptiveAvgPool2d(1)
         self.classifier = nn.Sequential(
             nn.Linear(self.conv_channels[-1], classifier_hidden),
-            nn.ReLU(),
-            nn.Dropout(dropout),
+            nn.LeakyReLU(0.33),
+            nn.Dropout(dropout*2),
             nn.Linear(classifier_hidden, n_label),
         )
 
@@ -350,8 +350,8 @@ class DualChannelCNNModel(torch.nn.Module):
         # concat both branches -> 2x final conv channels
         self.classifier = nn.Sequential(
             nn.Linear(self.conv_channels[-1] * 2, classifier_hidden),
-            nn.ReLU(),
-            nn.Dropout(dropout),
+            nn.LeakyReLU(0.33),
+            nn.Dropout(dropout*2),
             nn.Linear(classifier_hidden, n_label),
         )
 
@@ -361,7 +361,7 @@ class DualChannelCNNModel(torch.nn.Module):
         for i, out_ch in enumerate(conv_channels):
             blocks.extend([
                 nn.BatchNorm2d(in_ch),
-                nn.ReLU(),
+                nn.LeakyReLU(0.33),
                 nn.Conv2d(in_ch, out_ch, kernel_size=3, padding=1),
             ])
 
