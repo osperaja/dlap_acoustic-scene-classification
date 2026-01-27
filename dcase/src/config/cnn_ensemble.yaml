@@ -7,25 +7,32 @@ data:
   multi_stream: true
   stream_cache_dir: "./data/dcase/preprocessed_features"
   resample_cache_dir: "./data/dcase/resampled_audio"
-  batch_size: 128
-  n_workers: 4
+  precompute_mel: true
+  mel_cache_dir: "./data/dcase/precomputed_mels"
+  mel_config:
+    n_fft: 2048
+    f_min: 0.0
+    f_max: 22050.0
+    n_mels: 80
+  batch_size: 32
+  n_workers: 8
 
 experiment:
   n_label: 15
   max_epochs: 200
-  learning_rate: 0.005
+  learning_rate: 0.02
 
 network:
   cnn_config:
     n_label: 15
-    n_mels: 128
+    n_mels: 80
     dropout: 0.25
     last_layer_pooling: false
     pooling: [ 2,2 ]
 #    cnn_conv_channels: [ 32, 64, 128, 256 ]
-    cnn_conv_channels: [ 32, 64, 128, 256 ]
+    cnn_conv_channels: [ 64, 128, 256 ]
     classifier_hidden: 512
-    cnn_spec_augment: false
+    cnn_spec_augment: true
     cnn_use_mixup: false
     cnn_freq_mask_param: 15
     cnn_time_mask_param: 20
@@ -35,14 +42,14 @@ network:
 
   dccnn_config:
     n_label: 15
-    n_mels: 128
+    n_mels: 80
     dropout: 0.25
     last_layer_pooling: false
     pooling: [ 2,2 ]
 #    dccnn_conv_channels: [ 32, 64, 128, 256 ]
-    dccnn_conv_channels: [ 32, 64, 128, 256 ]
+    dccnn_conv_channels: [ 64, 128, 256 ]
     classifier_hidden: 512
-    dccnn_spec_augment: false
+    dccnn_spec_augment: true
     dccnn_use_mixup: false
     dccnn_freq_mask_param: 15
     dccnn_time_mask_param: 20
@@ -55,6 +62,8 @@ training:
   strategy: auto
   accelerator: auto
   devices: 1
+  precision: 16
+  accumulate_grad_batches: 2
 
 logging:
   tb_log_dir: "./data/tb_logs/"

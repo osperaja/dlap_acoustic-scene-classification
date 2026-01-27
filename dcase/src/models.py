@@ -68,7 +68,8 @@ class BaselineModel(torch.nn.Module):
     ) -> torch.Tensor:  # (BATCH, FRAMES', LABEL)
 
         # (BATCH, 1, N_MELS, FRAMES)
-        spec = torch.log(self.mel_transform(audio_data) + 1e-6)
+        with torch.no_grad():
+            spec = torch.log(self.mel_transform(audio_data) + 1e-6)
         spec = spec.squeeze(1)  # (BATCH, N_MELS, FRAMES)
 
         B, F, T = spec.shape
@@ -144,7 +145,8 @@ class LinSeqModel(torch.nn.Module):
     ) -> torch.Tensor:  # (BATCH, FRAMES', LABEL)
         assert audio_data.shape[1] == 1, ('baseline is single-channel', audio_data.shape[1])
 
-        features = torch.log(self.mel_transform(audio_data) + 1e-6)  # (B, 1, n_mels, T)
+        with torch.no_grad():
+            features = torch.log(self.mel_transform(audio_data) + 1e-6)  # (B, 1, n_mels, T)
 
         if self.spec_augment and self.training:
             for freq_mask in self.freq_masks:
@@ -265,7 +267,8 @@ class CNNModel(torch.nn.Module):
         if precomputed_mel is not None:
             features = precomputed_mel
         else:
-            features = torch.log(self.mel_transform(audio_data) + 1e-6)
+            with torch.no_grad():
+                features = torch.log(self.mel_transform(audio_data) + 1e-6)
 
         if self.spec_augment and self.training:
             for freq_mask in self.freq_masks:
@@ -394,8 +397,9 @@ class DualChannelCNNModel(torch.nn.Module):
             mel1 = precomputed_mel1
             mel2 = precomputed_mel2
         else:
-            mel1 = torch.log(self.mel_transform(audio_ch1) + 1e-6)  # (B, 1, mels, frames)
-            mel2 = torch.log(self.mel_transform(audio_ch2) + 1e-6)
+            with torch.no_grad():
+                mel1 = torch.log(self.mel_transform(audio_ch1) + 1e-6)  # (B, 1, mels, frames)
+                mel2 = torch.log(self.mel_transform(audio_ch2) + 1e-6)
 
         if self.spec_augment and self.training:
             for freq_mask in self.freq_masks:
@@ -451,16 +455,23 @@ class EnsembleCNNModel(torch.nn.Module):
     def forward(self, audio_stereo: torch.Tensor, labels=None):
         # audio_stereo: (B, 2, TIME) or dict from dataset
 
-        if isinstance(audio_stereo, dict) and 'streams' in audio_stereo:
-            batch_streams = audio_stereo['streams']
+        batch_streams = None
+        log_mels = {}
+        if isinstance(audio_stereo, dict):
+            if 'mels' in audio_stereo:
+                log_mels = audio_stereo['mels']
+            elif 'streams' in audio_stereo:
+                batch_streams = audio_stereo['streams']
+            else:
+                raise RuntimeError("multi_stream forward expects 'streams' or 'mels'")
         else:
-            raise RuntimeError("multi_stream forward expects precomputed 'streams'")
+            raise RuntimeError("multi_stream forward expects a dict batch")
 
         all_logits = []
-        log_mels = {}
-        if self.shared_mel:
+        if self.shared_mel and batch_streams is not None:
             for key, stream in batch_streams.items():
-                log_mels[key] = torch.log(self.mel_transform(stream) + 1e-6)
+                with torch.no_grad():
+                    log_mels[key] = torch.log(self.mel_transform(stream) + 1e-6)
 
         # 1. Dual Channel models (require 2 inputs)
         pairs = {
@@ -471,18 +482,18 @@ class EnsembleCNNModel(torch.nn.Module):
         }
 
         for name, (s1_key, s2_key) in pairs.items():
-            s1 = batch_streams[s1_key]
-            s2 = batch_streams[s2_key]
             if log_mels:
-                out = self.models[name](s1, s2, labels, log_mels[s1_key], log_mels[s2_key])
+                out = self.models[name](None, None, labels, log_mels[s1_key], log_mels[s2_key])
             else:
+                s1 = batch_streams[s1_key]
+                s2 = batch_streams[s2_key]
                 out = self.models[name](s1, s2, labels)
             all_logits.append(out['logits'])
 
         # 2. Single Channel models
         for name in ['harmonic', 'percussive', 'background', 'foreground']:
             if log_mels:
-                out = self.models[name](batch_streams[name], labels, precomputed_mel=log_mels[name])
+                out = self.models[name](None, labels, precomputed_mel=log_mels[name])
             else:
                 out = self.models[name](batch_streams[name], labels)
             all_logits.append(out['logits'])

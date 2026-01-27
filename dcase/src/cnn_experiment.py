@@ -46,7 +46,7 @@ class CNNExperiment(AcousticScenesExperiment):
         # Forward model - pass labels for mixup during training
         labels_for_mixup = target_label if stage == 'train' else None
         
-        if 'streams' in batch:
+        if 'streams' in batch or 'mels' in batch:
             # Pass the streams dict directly if it exists (from multi_stream dataset)
             output = self.model(batch, labels_for_mixup)
         else:

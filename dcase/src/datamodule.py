@@ -20,6 +20,9 @@ class AcousticScenesDatamodule(pl.LightningDataModule):
             multi_stream: bool = True,
             stream_cache_dir: str = None,
             resample_cache_dir: str = None,
+            precompute_mel: bool = False,
+            mel_cache_dir: str = None,
+            mel_config: dict = None,
     ):
         super(AcousticScenesDatamodule, self).__init__()
 
@@ -36,6 +39,9 @@ class AcousticScenesDatamodule(pl.LightningDataModule):
             mono=mono,
             stream_cache_dir=stream_cache_dir,
             resample_cache_dir=resample_cache_dir,
+            precompute_mel=precompute_mel,
+            mel_cache_dir=mel_cache_dir,
+            mel_config=mel_config,
         )
 
         self.val_dataset = AcousticScenesDataset(
@@ -46,6 +52,9 @@ class AcousticScenesDatamodule(pl.LightningDataModule):
             mono=mono,
             stream_cache_dir=stream_cache_dir,
             resample_cache_dir=resample_cache_dir,
+            precompute_mel=precompute_mel,
+            mel_cache_dir=mel_cache_dir,
+            mel_config=mel_config,
         )
         # self.test_dataset = AcousticScenesDataset(
         #     dataset_name='test',

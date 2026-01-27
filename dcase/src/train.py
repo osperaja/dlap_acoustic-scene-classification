@@ -58,7 +58,16 @@ def setup_logging(tb_log_dir: str, exp_name: str, version_id: int = None):
     return tb_logger, version_id
 
 
-def get_trainer(devices, logger, max_epochs, strategy, accelerator, ckpt_dir):
+def get_trainer(
+        devices,
+        logger,
+        max_epochs,
+        strategy,
+        accelerator,
+        ckpt_dir,
+        precision=32,
+        accumulate_grad_batches=1,
+):
     checkpoint_callback = ModelCheckpoint(
         dirpath=ckpt_dir,
         save_top_k=3,
@@ -70,9 +79,9 @@ def get_trainer(devices, logger, max_epochs, strategy, accelerator, ckpt_dir):
     early_stop = DelayedStartEarlyStopping( # https://github.com/Lightning-AI/pytorch-lightning/issues/16881, https://github.com/samgelman
         start_epoch=100,
         monitor="val/accuracy",
-        patience=15,
+        patience=25,
         mode="max",
-        verbose=True
+        verbose=True,
     )
     return pl.Trainer(
         enable_model_summary=True,
@@ -81,7 +90,9 @@ def get_trainer(devices, logger, max_epochs, strategy, accelerator, ckpt_dir):
         max_epochs=max_epochs,
         strategy=strategy,
         accelerator=accelerator,
-        callbacks=[checkpoint_callback, ModelSummary(max_depth=5), early_stop],
+        precision=precision,
+        accumulate_grad_batches=accumulate_grad_batches,
+        callbacks=[checkpoint_callback, ModelSummary(max_depth=4), early_stop],
     )
 
 
