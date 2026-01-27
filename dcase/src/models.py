@@ -35,7 +35,7 @@ class BaselineModel(torch.nn.Module):
             n_context: int = 5,
             n_hidden: int = 50,
             n_hidden_layers: int = 2,
-            dropout: float = 0.5,
+            dropout: float = 0.2,
             n_label: int = 15,
     ):
         super(BaselineModel, self).__init__()

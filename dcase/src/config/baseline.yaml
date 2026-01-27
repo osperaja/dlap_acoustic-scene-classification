@@ -9,7 +9,7 @@ data:
   multi_stream: false
 
 experiment:
-  learning_rate: 0.0005
+  learning_rate: 0.001
   max_epochs: 200
   n_label: 15
 
