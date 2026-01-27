@@ -9,7 +9,7 @@ data:
   multi_stream: false
 
 experiment:
-  learning_rate: 0.001
+  learning_rate: 0.0005
   max_epochs: 200
   n_label: 15
 
@@ -31,5 +31,5 @@ training:
   devices: 1
 
 logging:
-  tb_log_dir: "./data/tb_logs/"
-  ckpt_dir: "./data/ckpts/"
+  tb_log_dir: "~/dcase/tb_logs/"
+  ckpt_dir: "~/dcase/ckpts/"
