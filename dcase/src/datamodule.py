@@ -18,6 +18,8 @@ class AcousticScenesDatamodule(pl.LightningDataModule):
             mono: bool = False,
             base_data_path: str = './data/dcase',
             multi_stream: bool = True,
+            stream_cache_dir: str = None,
+            resample_cache_dir: str = None,
     ):
         super(AcousticScenesDatamodule, self).__init__()
 
@@ -32,6 +34,8 @@ class AcousticScenesDatamodule(pl.LightningDataModule):
             base_data_path=base_data_path,
             sample_rate=sample_rate,
             mono=mono,
+            stream_cache_dir=stream_cache_dir,
+            resample_cache_dir=resample_cache_dir,
         )
 
         self.val_dataset = AcousticScenesDataset(
@@ -40,6 +44,8 @@ class AcousticScenesDatamodule(pl.LightningDataModule):
             base_data_path=base_data_path,
             sample_rate=sample_rate,
             mono=mono,
+            stream_cache_dir=stream_cache_dir,
+            resample_cache_dir=resample_cache_dir,
         )
         # self.test_dataset = AcousticScenesDataset(
         #     dataset_name='test',

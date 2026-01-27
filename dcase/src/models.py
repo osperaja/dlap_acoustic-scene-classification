@@ -259,9 +259,13 @@ class CNNModel(torch.nn.Module):
             self,
             audio_data: torch.Tensor,  # (BATCH, 1, TIME)
             labels: torch.Tensor = None,  # (BATCH,) for mixup
+            precomputed_mel: torch.Tensor = None,  # (BATCH, 1, n_mels, FRAMES)
     ) -> dict:
         # (BATCH, 1, n_mels, FRAMES)
-        features = torch.log(self.mel_transform(audio_data) + 1e-6)
+        if precomputed_mel is not None:
+            features = precomputed_mel
+        else:
+            features = torch.log(self.mel_transform(audio_data) + 1e-6)
 
         if self.spec_augment and self.training:
             for freq_mask in self.freq_masks:
@@ -377,10 +381,21 @@ class DualChannelCNNModel(torch.nn.Module):
 
         return x1_mix, x2_mix, y, y[idx], lam
 
-    def forward(self, audio_ch1: torch.Tensor, audio_ch2: torch.Tensor, labels=None):
+    def forward(
+            self,
+            audio_ch1: torch.Tensor,
+            audio_ch2: torch.Tensor,
+            labels=None,
+            precomputed_mel1: torch.Tensor = None,
+            precomputed_mel2: torch.Tensor = None,
+    ):
         # each input: (B, 1, TIME)
-        mel1 = torch.log(self.mel_transform(audio_ch1) + 1e-6)  # (B, 1, mels, frames)
-        mel2 = torch.log(self.mel_transform(audio_ch2) + 1e-6)
+        if precomputed_mel1 is not None and precomputed_mel2 is not None:
+            mel1 = precomputed_mel1
+            mel2 = precomputed_mel2
+        else:
+            mel1 = torch.log(self.mel_transform(audio_ch1) + 1e-6)  # (B, 1, mels, frames)
+            mel2 = torch.log(self.mel_transform(audio_ch2) + 1e-6)
 
         if self.spec_augment and self.training:
             for freq_mask in self.freq_masks:
@@ -404,10 +419,21 @@ class DualChannelCNNModel(torch.nn.Module):
 
 
 class EnsembleCNNModel(torch.nn.Module):
-    def __init__(self, cnn_config: dict, dccnn_config: dict, sample_rate: int = 44100):
+    def __init__(self, cnn_config: dict, dccnn_config: dict, sample_rate: int = 44100, shared_mel: bool = True):
         super().__init__()
 
         self.preprocessor = MultiStreamPreprocessor(sample_rate=sample_rate)
+        self.shared_mel = shared_mel
+        if self.shared_mel:
+            if cnn_config.get('n_mels') != dccnn_config.get('n_mels'):
+                raise ValueError("shared_mel requires matching n_mels for cnn and dccnn configs")
+            self.mel_transform = MelSpectrogram(
+                sample_rate=sample_rate,
+                n_fft=cnn_config.get('n_fft', 2048),
+                f_min=cnn_config.get('f_min', 0.0),
+                f_max=cnn_config.get('f_max', 22050.0),
+                n_mels=cnn_config.get('n_mels', 40),
+            )
 
         self.models = nn.ModuleDict({
             'left': DualChannelCNNModel(**dccnn_config),
@@ -431,22 +457,34 @@ class EnsembleCNNModel(torch.nn.Module):
             raise RuntimeError("multi_stream forward expects precomputed 'streams'")
 
         all_logits = []
+        log_mels = {}
+        if self.shared_mel:
+            for key, stream in batch_streams.items():
+                log_mels[key] = torch.log(self.mel_transform(stream) + 1e-6)
 
         # 1. Dual Channel models (require 2 inputs)
         pairs = {
-            'left': (batch_streams['left'], batch_streams['right']),
-            'right': (batch_streams['right'], batch_streams['left']),
-            'mid': (batch_streams['mid'], batch_streams['side']),
-            'side': (batch_streams['side'], batch_streams['mid']),
+            'left': ('left', 'right'),
+            'right': ('right', 'left'),
+            'mid': ('mid', 'side'),
+            'side': ('side', 'mid'),
         }
 
-        for name, (s1, s2) in pairs.items():
-            out = self.models[name](s1, s2, labels)
+        for name, (s1_key, s2_key) in pairs.items():
+            s1 = batch_streams[s1_key]
+            s2 = batch_streams[s2_key]
+            if log_mels:
+                out = self.models[name](s1, s2, labels, log_mels[s1_key], log_mels[s2_key])
+            else:
+                out = self.models[name](s1, s2, labels)
             all_logits.append(out['logits'])
 
         # 2. Single Channel models
         for name in ['harmonic', 'percussive', 'background', 'foreground']:
-            out = self.models[name](batch_streams[name], labels)
+            if log_mels:
+                out = self.models[name](batch_streams[name], labels, precomputed_mel=log_mels[name])
+            else:
+                out = self.models[name](batch_streams[name], labels)
             all_logits.append(out['logits'])
 
         logits_stack = torch.stack(all_logits)  # (num_models, B, num_classes)

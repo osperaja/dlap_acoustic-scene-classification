@@ -16,6 +16,8 @@ class AcousticScenesDataset(torch.utils.data.Dataset):
             mono: bool = True,
             base_data_path: str = './data/dcase',
             multi_stream: bool = False,
+            stream_cache_dir: str = None,
+            resample_cache_dir: str = None,
     ):
         super(AcousticScenesDataset, self).__init__()
 
@@ -24,12 +26,14 @@ class AcousticScenesDataset(torch.utils.data.Dataset):
         self.sample_rate = sample_rate
         self.mono = mono
         self.multi_stream = multi_stream
+        self.stream_cache_dir = stream_cache_dir
+        self.resample_cache_dir = resample_cache_dir
 
         if multi_stream:
             from preprocessing import MultiStreamPreprocessor
             self.preprocessor = MultiStreamPreprocessor(
                 sample_rate,
-                cache_dir=os.path.join(base_data_path, "preprocessed_features")
+                cache_dir=stream_cache_dir or os.path.join(base_data_path, "preprocessed_features")
             )
             if mono:
                 raise ValueError("multi_stream requires mono=False")
@@ -75,10 +79,28 @@ class AcousticScenesDataset(torch.utils.data.Dataset):
 
         # resample if needed
         if self.sample_rate is not None and self.sample_rate != audio_sample_rate:
-            sr_ratio = Fraction(self.sample_rate, audio_sample_rate)
-            audio_data = resample_poly(
-                audio_data, up=sr_ratio.numerator, down=sr_ratio.denominator, axis=0
-            )
+            cached_audio = None
+            if self.resample_cache_dir:
+                key = os.path.splitext(os.path.basename(example['audio_path']))[0]
+                cache_path = os.path.join(
+                    self.resample_cache_dir,
+                    f"{key}_{audio_sample_rate}_to_{self.sample_rate}.npy"
+                )
+                if os.path.exists(cache_path):
+                    cached_audio = np.load(cache_path)
+            if cached_audio is not None:
+                audio_data = cached_audio
+            else:
+                sr_ratio = Fraction(self.sample_rate, audio_sample_rate)
+                audio_data = resample_poly(
+                    audio_data, up=sr_ratio.numerator, down=sr_ratio.denominator, axis=0
+                )
+                if self.resample_cache_dir:
+                    os.makedirs(self.resample_cache_dir, exist_ok=True)
+                    try:
+                        np.save(cache_path, audio_data)
+                    except Exception:
+                        pass
 
         if self.multi_stream:
             key = os.path.splitext(os.path.basename(example['audio_path']))[0]
