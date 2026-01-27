@@ -55,17 +55,6 @@ class AcousticScenesDatamodule(pl.LightningDataModule):
         #     mono=mono,
         # )
 
-        if self.train_dataset.multi_stream:
-            for idx in tqdm(range(len(self.train_dataset)), desc="Precompute train streams"):
-                _ = self.train_dataset[idx]
-
-        if self.val_dataset.multi_stream:
-            for idx in tqdm(range(len(self.val_dataset)), desc="Precompute val streams"):
-                _ = self.val_dataset[idx]
-
-        # if self.val_dataset.multi_stream:
-        #     for idx in tqdm(range(len(self.test_dataset)), desc="Precompute val streams"):
-        #         _ = self.val_dataset[idx]
 
     def train_dataloader(self):
         return DataLoader(
