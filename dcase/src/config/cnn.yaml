@@ -2,8 +2,8 @@ model: CNNModel
 
 data:
   sample_rate: 44100
-  batch_size: 8
-  n_workers: 16
+  batch_size: 64
+  n_workers: 8
   mono: true
   multi_stream: false
   base_data_path: './data/dcase'
@@ -15,14 +15,14 @@ experiment:
 
 network:
   n_fft: 2048
-  n_mels: 96
-  dropout: 0.25
+  n_mels: 128
+  dropout: 0.0
   f_min: 0
   f_max: 22050
   cnn_conv_channels: [ 32, 64, 128, 256 ]
   last_layer_pooling: true
   pooling: [ 2,2 ]
-  classifier_hidden: 128
+  classifier_hidden: 512
 
 augmentation:
   cnn_spec_augment: true
@@ -40,5 +40,5 @@ training:
   devices: 1
 
 logging:
-  tb_log_dir: "~/dcase/tb_logs/"
-  ckpt_dir: "~/dcase/ckpts/"
+  tb_log_dir: "./data/tb_logs/"
+  ckpt_dir: "./data/ckpts/"
