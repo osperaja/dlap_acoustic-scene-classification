@@ -12,6 +12,8 @@ experiment:
   learning_rate: 0.001
   max_epochs: 200
   n_label: 15
+  optimizer_type: "adam"
+  use_scheduler: false
 
 network:
   n_fft: 2048

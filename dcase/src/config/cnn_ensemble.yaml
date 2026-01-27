@@ -21,6 +21,8 @@ experiment:
   n_label: 15
   max_epochs: 200
   learning_rate: 0.02
+  optimizer_type: "SGD"
+  use_scheduler: true
 
 network:
   cnn_config:
