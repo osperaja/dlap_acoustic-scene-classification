@@ -81,7 +81,7 @@ def get_trainer(
     early_stop = DelayedStartEarlyStopping( # https://github.com/Lightning-AI/pytorch-lightning/issues/16881, https://github.com/samgelman
         start_epoch=100,
         monitor="val/accuracy",
-        patience=90, # was 32
+        patience=40,
         mode="max",
         verbose=True,
     )

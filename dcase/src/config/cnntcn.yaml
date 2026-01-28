@@ -2,7 +2,7 @@ model: CNNTCNModel
 
 data:
   sample_rate: 44100
-  batch_size: 32
+  batch_size: 128
   n_workers: 8
   mono: true
   multi_stream: false
@@ -21,7 +21,7 @@ network:
   n_mels: 128
   f_min: 0
   f_max: 22050
-  dropout: 0.15
+  dropout: 0.0
   
   # CNN parameters
   cnn_channels: [32, 64]
@@ -33,12 +33,12 @@ network:
   tcn_kernel_size: 3
   
   # Classifier
-  classifier_hidden: 256
+  classifier_hidden: 512
 
 augmentation:
   spec_augment: true
   freq_mask_param: 15        
-  time_mask_param: 25
+  time_mask_param: 20
   n_freq_masks: 2
   n_time_masks: 2
   use_mixup: false
