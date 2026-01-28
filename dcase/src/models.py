@@ -725,3 +725,224 @@ class SklearnAudioEnsembleClassifier(BaseEstimator, ClassifierMixin):
     def score(self, dataloader):
         y_pred, y_true = self.predict(dataloader)
         return (y_pred == y_true).mean()
+
+
+##############
+
+
+class CNNTCNModel(nn.Module):
+    """
+    CNN + TCN model for acoustic scene classification.
+    - Extracts log-mel spectrograms
+    - 2D CNN for local time-freq patterns
+    - TCN for temporal context
+    - SpecAugment and mixup supported
+    """
+    
+    def __init__(
+        self,
+        sample_rate: int = 44100,
+        n_fft: int = 2048,
+        n_mels: int = 128,
+        f_min: float = 0.0,
+        f_max: float = 22050.0,
+
+        cnn_channels: list = None,
+        cnn_kernel_size: tuple = (3, 3),
+        cnn_pool_size: tuple = (2, 2),
+        
+        tcn_channels: list = None,
+        tcn_kernel_size: int = 3,
+        
+        dropout: float = 0.3,
+        
+        classifier_hidden: int = 128,
+        n_label: int = 15,
+        
+        spec_augment: bool = True,
+        freq_mask_param: int = 20,
+        time_mask_param: int = 30,
+        n_freq_masks: int = 2,
+        n_time_masks: int = 2,
+        use_mixup: bool = True,
+        mixup_alpha: float = 0.3,
+    ):
+        super(CNNTCNModel, self).__init__()
+        
+        if cnn_channels is None:
+            cnn_channels = [32, 64]  
+        if tcn_channels is None:
+            tcn_channels = [64, 64]  
+        
+        self.spec_augment = spec_augment
+        self.use_mixup = use_mixup
+        self.mixup_alpha = mixup_alpha
+        
+        self.mel_transform = MelSpectrogram(
+            sample_rate=sample_rate,
+            n_fft=n_fft,
+            f_min=f_min,
+            f_max=f_max,
+            n_mels=n_mels,
+        )
+
+        # SpecAugment
+        if self.spec_augment:
+            from torchaudio.transforms import FrequencyMasking, TimeMasking
+            self.freq_masks = nn.ModuleList([
+                FrequencyMasking(freq_mask_param) 
+                for _ in range(n_freq_masks)
+            ])
+            self.time_masks = nn.ModuleList([
+                TimeMasking(time_mask_param) 
+                for _ in range(n_time_masks)
+            ])
+
+        # 2D CNN feature extraction blocks
+        self.cnn_blocks = nn.ModuleList()
+        in_channels = 1
+        for out_channels in cnn_channels:
+            block = nn.Sequential(
+                nn.Conv2d(in_channels, out_channels, kernel_size=cnn_kernel_size, padding=1),
+                nn.BatchNorm2d(out_channels),
+                nn.ReLU(),
+                nn.Conv2d(out_channels, out_channels, kernel_size=cnn_kernel_size, padding=1),
+                nn.BatchNorm2d(out_channels),
+                nn.ReLU(),
+                nn.MaxPool2d(cnn_pool_size),
+                nn.Dropout2d(dropout),
+            )
+            self.cnn_blocks.append(block)
+            in_channels = out_channels
+       
+        self.tcn_blocks = nn.ModuleList()
+
+        # Pool freq-axis   
+        self.adaptive_freq_pool = nn.AdaptiveAvgPool2d((8, None))  # Reduce freq to 8 bins
+        tcn_input_channels = cnn_channels[-1] * 8  # cnn_channels[-1] * 8 (freq bins after adaptive pool)
+        
+        in_channels = tcn_input_channels
+        for i, out_channels in enumerate(tcn_channels):
+            dilation = 2 ** i
+            block = TCNBlock(
+                in_channels=in_channels,
+                out_channels=out_channels,
+                kernel_size=tcn_kernel_size,
+                dilation=dilation,
+                dropout=dropout,
+            )
+            self.tcn_blocks.append(block)
+            in_channels = out_channels
+
+        self.global_pool = nn.AdaptiveAvgPool1d(1)
+        
+        self.classifier = nn.Sequential(
+            nn.Linear(tcn_channels[-1], classifier_hidden),
+            nn.ReLU(),
+            nn.Dropout(dropout),
+            nn.Linear(classifier_hidden, n_label),
+        )
+    
+    def mixup_data(self, x, y):
+        lam = torch.distributions.Beta(self.mixup_alpha, self.mixup_alpha).sample().item()
+        batch_size = x.size(0)
+        index = torch.randperm(batch_size, device=x.device)
+        mixed_x = lam * x + (1 - lam) * x[index]
+        y_a, y_b = y, y[index]
+        return mixed_x, y_a, y_b, lam
+    
+    def forward(self, audio_data: torch.Tensor, labels: torch.Tensor = None) -> dict:
+        with torch.no_grad():
+            features = torch.log(self.mel_transform(audio_data) + 1e-6)
+        
+        # SpecAugment
+        if self.spec_augment and self.training:
+            for freq_mask in self.freq_masks:
+                features = freq_mask(features)
+            for time_mask in self.time_masks:
+                features = time_mask(features)
+        
+        # mixup during training
+        y_a, y_b, lam = None, None, None
+        if self.use_mixup and self.training and labels is not None:
+            features, y_a, y_b, lam = self.mixup_data(features, labels)
+        
+        # CNN Blocks
+        x = features
+        for cnn_block in self.cnn_blocks:
+            x = cnn_block(x)
+        
+        # Adaptive pooling and reshape for TCN
+        x = self.adaptive_freq_pool(x) # (B, C, F=8, T)
+        batch, channels, freq, time = x.shape
+        x = x.view(batch, channels * freq, time)
+        
+        # TCN Blocks
+        for tcn_block in self.tcn_blocks:
+            x = tcn_block(x) 
+
+        # Global pooling over time
+        x = self.global_pool(x).squeeze(-1) 
+        
+        logits = self.classifier(x)
+        
+        if self.training and y_a is not None:
+            return {"logits": logits, "y_a": y_a, "y_b": y_b, "lam": lam}
+        return {"logits": logits}
+
+
+class TCNBlock(nn.Module):
+    """
+    1D Temporal Convolutional Network block with residual connection.
+    - Two (dilated conv + BN + ReLU + dropout) stages
+    - Residual path with 1x1 conv if needed
+    - Non-causal (pads both sides)
+    """
+    
+    def __init__(
+        self,
+        in_channels: int,
+        out_channels: int,
+        kernel_size: int = 3,
+        dilation: int = 1,
+        dropout: float = 0.2,
+    ):
+        super(TCNBlock, self).__init__()
+        
+        padding = (kernel_size - 1) * dilation // 2
+        
+        self.conv1 = nn.Conv1d(
+            in_channels, out_channels, kernel_size,
+            dilation=dilation, padding=padding
+        )
+        self.bn1 = nn.BatchNorm1d(out_channels)
+        
+        self.conv2 = nn.Conv1d(
+            out_channels, out_channels, kernel_size,
+            dilation=dilation, padding=padding
+        )
+        self.bn2 = nn.BatchNorm1d(out_channels)
+        
+        self.relu = nn.ReLU()
+        self.dropout = nn.Dropout(dropout)
+        
+        # Project input if channel dims differ
+        if in_channels != out_channels:
+            self.residual = nn.Conv1d(in_channels, out_channels, 1)
+        else:
+            self.residual = nn.Identity()
+    
+    def forward(self, x):
+        residual = self.residual(x)
+        
+        out = self.conv1(x)
+        out = self.bn1(out)
+        out = self.relu(out)
+        out = self.dropout(out)
+        
+        out = self.conv2(out)
+        out = self.bn2(out)
+        out = self.relu(out)
+        out = self.dropout(out)
+        
+        return self.relu(out + residual)
