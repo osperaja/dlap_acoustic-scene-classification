@@ -710,13 +710,28 @@ class SklearnAudioEnsembleClassifier(BaseEstimator, ClassifierMixin):
             features.append(feat)
         return np.array(features)
 
-    def predict(self, dataloader):
+    def predict(self, dataloader_or_X):
+        """
+        Supports two calling conventions:
+            1. predict(dataloader) -> (y_pred, y_true)
+            2. predict(X) where X is a feature matrix -> y_pred
+        """
+        if isinstance(dataloader_or_X, np.ndarray):
+            X = dataloader_or_X
+            return self.ensemble.predict(X)
+
+        if torch.is_tensor(dataloader_or_X):
+            X = dataloader_or_X.detach().cpu().numpy()
+            return self.ensemble.predict(X)
+
+        dataloader = dataloader_or_X
         X_all, y_all = [], []
         for batch in tqdm(dataloader, desc="Predicting"):
             audio = batch['audio_data']
             labels = batch['class_label'].numpy()
             X_all.append(self.extract_features(audio))
             y_all.append(labels)
+
         X = np.vstack(X_all)
         y_true = np.concatenate(y_all)
         y_pred = self.ensemble.predict(X)

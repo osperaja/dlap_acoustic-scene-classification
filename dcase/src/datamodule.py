@@ -56,13 +56,13 @@ class AcousticScenesDatamodule(pl.LightningDataModule):
             mel_cache_dir=mel_cache_dir,
             mel_config=mel_config,
         )
-        # self.test_dataset = AcousticScenesDataset(
-        #     dataset_name='test',
-        #     multi_stream=multi_stream,
-        #     base_data_path=base_data_path,
-        #     sample_rate=sample_rate,
-        #     mono=mono,
-        # )
+        self.test_dataset = AcousticScenesDataset(
+            dataset_name='test',
+            multi_stream=multi_stream,
+            base_data_path=base_data_path,
+            sample_rate=sample_rate,
+            mono=mono,
+        )
 
 
     def train_dataloader(self):

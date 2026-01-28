@@ -24,7 +24,7 @@ network:
   cnn_conv_channels: [ 32, 64, 128, 256 ]
   last_layer_pooling: true
   pooling: [ 2,2 ]
-  classifier_hidden: 1024
+  classifier_hidden: 512
 
 augmentation:
   cnn_spec_augment: true

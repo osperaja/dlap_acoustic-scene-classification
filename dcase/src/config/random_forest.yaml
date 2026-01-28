@@ -12,7 +12,7 @@ experiment:
 
 network:
   type: "random_forest"
-  n_mels: 64
+  n_mels: 40
   params:
     n_estimators: 2500
     max_depth: 28
