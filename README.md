@@ -13,15 +13,15 @@ The project supports multiple model architectures via YAML configuration files. 
 
 ### Available Models
 
-| Model | Config | Description                                                                   |
-|-------|--------|-------------------------------------------------------------------------------|
-| `BaselineModel` | `baseline.yaml` | DCASE baseline MLP with 5-frame context (200 input features)                  |
-| `LinSeqModel` | `linseq.yaml` | Extended linear sequential model with SpecAugment                             |
-| `CNNModel` | `cnn.yaml` | CNN with optional SpecAugment and Mixup augmentation                          |
-| `EnsembleCNNModel` | `cnn_ensemble.yaml` | Multi-Stream CNN Ensemble with optional SpecAugment and Mixup and SpecAugment |
-| `SklearnAudioClassifier` | `random_forest.yaml` | Random Forest on mel spectrogram statistics                                   |
-| `SklearnAudioClassifier` | `pca_svm.yaml` | PCA + SVM pipeline on mel spectrogram statistics                              |
-| `SklearnAudioClassifier` | `pca_svm.yaml` | Random Forest & PCA + SVM pipeline ensemble on mel spectrogram statistics     |
+| Model | Config                  | Description                                                                   |
+|-------|-------------------------|-------------------------------------------------------------------------------|
+| `BaselineModel` | `baseline.yaml`         | DCASE baseline MLP with 5-frame context (200 input features)                  |
+| `LinSeqModel` | `linseq.yaml`           | Extended linear sequential model with SpecAugment                             |
+| `CNNModel` | `cnn.yaml`              | CNN with optional SpecAugment and Mixup augmentation                          |
+| `EnsembleCNNModel` | `cnn_ensemble.yaml`     | Multi-Stream CNN Ensemble with optional SpecAugment and Mixup and SpecAugment |
+| `SklearnAudioClassifier` | `random_forest.yaml`    | Random Forest on mel spectrogram statistics                                   |
+| `SklearnAudioClassifier` | `pca_svm.yaml`          | PCA + SVM pipeline on mel spectrogram statistics                              |
+| `SklearnAudioEnsembleClassifier` | `sklearn_ensemble.yaml` | Random Forest & PCA + SVM pipeline ensemble on mel spectrogram statistics     |
 
 ### PyTorch Models
 
