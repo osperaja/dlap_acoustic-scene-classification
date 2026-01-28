@@ -15,6 +15,7 @@ class AcousticScenesDataset(torch.utils.data.Dataset):
             dataset_name: Literal['train', 'val', 'test'],
             sample_rate: int = 44100,
             mono: bool = True,
+            # base_data_path: str = '/data/baproj/dlap',
             base_data_path: str = './data/dcase',
             multi_stream: bool = False,
             stream_cache_dir: str = None,

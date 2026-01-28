@@ -7,12 +7,12 @@ import yaml
 from torch.multiprocessing import set_start_method
 try:
     from .datamodule import AcousticScenesDatamodule as DM
-    from .models import BaselineModel, LinSeqModel, CNNModel, EnsembleCNNModel
+    from .models import BaselineModel, LinSeqModel, CNNModel, EnsembleCNNModel, CNNTCNModel
     from .baseline_experiment import BaselineExperiment as BLExp
     from .cnn_experiment import CNNExperiment as CNNExp
 except ImportError:
     from datamodule import AcousticScenesDatamodule as DM
-    from models import BaselineModel, LinSeqModel, CNNModel, EnsembleCNNModel
+    from models import BaselineModel, LinSeqModel, CNNModel, EnsembleCNNModel, CNNTCNModel
     from baseline_experiment import BaselineExperiment as BLExp
     from cnn_experiment import CNNExperiment as CNNExp
 
@@ -21,6 +21,7 @@ MODEL_REGISTRY = {
     'LinSeqModel': LinSeqModel,
     'CNNModel': CNNModel,
     'EnsembleCNNModel': EnsembleCNNModel,
+    'CNNTCNModel': CNNTCNModel,
 }
 
 EXPERIMENT_REGISTRY = {
@@ -28,6 +29,7 @@ EXPERIMENT_REGISTRY = {
     'LinSeqModel': BLExp,
     'CNNModel': CNNExp,
     'EnsembleCNNModel': CNNExp,
+    'CNNTCNModel': CNNExp,
 }
 
 
@@ -79,7 +81,7 @@ def get_trainer(
     early_stop = DelayedStartEarlyStopping( # https://github.com/Lightning-AI/pytorch-lightning/issues/16881, https://github.com/samgelman
         start_epoch=100,
         monitor="val/accuracy",
-        patience=32,
+        patience=90, # was 32
         mode="max",
         verbose=True,
     )
