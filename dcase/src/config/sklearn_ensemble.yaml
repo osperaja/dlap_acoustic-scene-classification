@@ -16,13 +16,13 @@ ensemble:
     - name: "random_forest"
       n_mels: 40
       params:
-        n_estimators: 2000
-        max_depth: 20
+        n_estimators: 2500
+        max_depth: 28
     - name: "pca_svm"
       n_mels: 40
       params:
-        n_components: 64
-        svm_C: 10.0
+        n_components: 96
+        svm_C: 13.0
         svm_kernel: "rbf"
   final_estimator:
     type: "logistic_regression"

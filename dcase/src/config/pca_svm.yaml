@@ -14,6 +14,6 @@ network:
   type: "pca_svm"
   n_mels: 40
   params:
-    n_components: 64
-    svm_C: 10.0
+    n_components: 96
+    svm_C: 13.0
     svm_kernel: "rbf"

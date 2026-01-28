@@ -1,8 +1,11 @@
 import numpy as np
+import scipy
 import torch
+import torchaudio
+from scipy.stats import skew
 from sklearn.linear_model import LogisticRegression
+from sympy.stats import kurtosis
 from torch import nn
-from torch.nn.modules import pooling
 from torchaudio.transforms import MelSpectrogram
 from tqdm import tqdm
 
@@ -519,7 +522,9 @@ class SklearnAudioClassifier:
             n_components: int = 100,
             svm_C: float = 10.0,
             svm_kernel: str = "rbf",
+            win_length: int = 2048,
     ):
+        self.win_length = win_length
         self.classifier_type = classifier_type
         self.n_mels = n_mels
 
@@ -551,16 +556,28 @@ class SklearnAudioClassifier:
 
     def extract_features(self, audio_data: torch.Tensor) -> np.ndarray:
         with torch.no_grad():
+            window = torch.hann_window(self.win_length)
             mel_spec = torch.log(self.mel_transform(audio_data) + 1e-6)
             mel_spec = mel_spec.squeeze(1).numpy()
 
+            centroid = torchaudio.functional.spectral_centroid(
+                audio_data, 44100, pad=0, window=window, n_fft=2048, hop_length=882, win_length=2048
+            ).squeeze(1)
+
         features = []
-        for spec in mel_spec:
+        for i, spec in enumerate(mel_spec):
             feat = np.concatenate([
                 spec.mean(axis=1),
+                np.median(spec, axis=1),
                 spec.std(axis=1),
                 spec.max(axis=1),
                 spec.min(axis=1),
+                np.ptp(spec, axis=1),
+                skew(spec, axis=1),
+                scipy.stats.kurtosis(spec, axis=1),
+                np.array([centroid[i].mean()], dtype=np.float32),
+                np.array([centroid[i].std()], dtype=np.float32),
+                np.sqrt(np.mean(spec ** 2, axis=1)),
             ])
             features.append(feat)
         return np.array(features)
@@ -604,6 +621,7 @@ class SklearnAudioEnsembleClassifier(BaseEstimator, ClassifierMixin):
             sample_rate=44100,
             n_fft=2048,
             hop_length=882,
+            win_length: int = 2048,
             ensemble_type="stacking",
     ):
         self.base_classifiers = base_classifiers
@@ -620,10 +638,11 @@ class SklearnAudioEnsembleClassifier(BaseEstimator, ClassifierMixin):
             hop_length=self.hop_length,
             n_mels=self.n_mels,
         )
+        self.win_length = win_length
 
     def fit(self, dataloader):
         X_all, y_all = [], []
-        for batch in dataloader:
+        for batch in tqdm(dataloader, desc="Fitting ensemble classifier"):
             audio = batch['audio_data']
             labels = batch['class_label'].numpy()
             X_all.append(self.extract_features(audio))
@@ -665,15 +684,28 @@ class SklearnAudioEnsembleClassifier(BaseEstimator, ClassifierMixin):
 
     def extract_features(self, audio_data: torch.Tensor) -> np.ndarray:
         with torch.no_grad():
+            window = torch.hann_window(self.win_length)
             mel_spec = torch.log(self.mel_transform(audio_data) + 1e-6)
             mel_spec = mel_spec.squeeze(1).numpy()
+
+            centroid = torchaudio.functional.spectral_centroid(
+                audio_data, 44100, pad=0, window=window, n_fft=2048, hop_length=882, win_length=2048
+            ).squeeze(1)
+
         features = []
-        for spec in mel_spec:
+        for i, spec in enumerate(mel_spec):
             feat = np.concatenate([
                 spec.mean(axis=1),
+                np.median(spec, axis=1),
                 spec.std(axis=1),
                 spec.max(axis=1),
                 spec.min(axis=1),
+                np.ptp(spec, axis=1),
+                skew(spec, axis=1),
+                scipy.stats.kurtosis(spec, axis=1),
+                np.array([centroid[i].mean()], dtype=np.float32),
+                np.array([centroid[i].std()], dtype=np.float32),
+                np.sqrt(np.mean(spec ** 2, axis=1)),
             ])
             features.append(feat)
         return np.array(features)

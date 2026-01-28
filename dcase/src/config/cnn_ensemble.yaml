@@ -14,7 +14,7 @@ data:
     f_min: 0.0
     f_max: 22050.0
     n_mels: 80
-  batch_size: 32
+  batch_size: 64
   n_workers: 8
 
 experiment:
@@ -27,12 +27,12 @@ experiment:
 network:
   cnn_config:
     n_label: 15
-    n_mels: 80
-    dropout: 0.25
-    last_layer_pooling: false
+    n_mels: 128
+    dropout: 0.0
+    last_layer_pooling: true
     pooling: [ 2,2 ]
 #    cnn_conv_channels: [ 32, 64, 128, 256 ]
-    cnn_conv_channels: [ 64, 128, 256 ]
+    cnn_conv_channels: [ 32, 64, 128, 256 ]
     classifier_hidden: 512
     cnn_spec_augment: true
     cnn_use_mixup: false
@@ -44,12 +44,12 @@ network:
 
   dccnn_config:
     n_label: 15
-    n_mels: 80
-    dropout: 0.25
-    last_layer_pooling: false
+    n_mels: 128
+    dropout: 0.0
+    last_layer_pooling: true
     pooling: [ 2,2 ]
 #    dccnn_conv_channels: [ 32, 64, 128, 256 ]
-    dccnn_conv_channels: [ 64, 128, 256 ]
+    dccnn_conv_channels: [ 32, 64, 128, 256 ]
     classifier_hidden: 512
     dccnn_spec_augment: true
     dccnn_use_mixup: false
@@ -65,7 +65,7 @@ training:
   accelerator: auto
   devices: 1
   precision: 16
-  accumulate_grad_batches: 2
+  accumulate_grad_batches: 1
 
 logging:
   tb_log_dir: "./data/tb_logs/"

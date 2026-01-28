@@ -7,7 +7,6 @@ import numpy as np
 import yaml
 from sklearn.linear_model import LogisticRegression
 from torch.utils.data import DataLoader
-from tqdm import tqdm
 from sklearn.metrics import classification_report, confusion_matrix
 import matplotlib.pyplot as plt
 import seaborn as sns
@@ -23,15 +22,6 @@ def build_final_estimator(cfg):
     if cfg["type"] == "logistic_regression":
         return LogisticRegression(**cfg.get("params", {}))
     raise ValueError(f"Unknown final_estimator type: {cfg['type']}")
-
-def extract_all_features(model, dataloader, desc="Extracting features"):
-    X_all, y_all = [], []
-    for batch in tqdm(dataloader, desc=desc):
-        audio = batch['audio_data']
-        labels = batch['class_label'].numpy()
-        X_all.append(model.extract_features(audio))
-        y_all.append(labels)
-    return np.vstack(X_all), np.concatenate(y_all)
 
 def plot_confusion_matrix(y_true, y_pred, class_names, save_path=None):
     cm = confusion_matrix(y_true, y_pred)
@@ -123,12 +113,12 @@ def main():
 
     model.fit(dataloader=train_loader)
 
-    print("Predicting training set:\n")
+    print("Predicting training set:")
     train_acc = model.score(train_loader)
 
-    print(f"Train accuracy: {train_acc:.3f}")
+    print(f"\nTrain accuracy: {train_acc:.3f}")
 
-    print("Predicting validation set:\n")
+    print("Predicting validation set:")
     val_acc = model.score(val_loader)
     val_pred, y_val = model.predict(val_loader)
 
@@ -137,7 +127,6 @@ def main():
     print("\n" + "=" * 50)
     print("results:")
     print("=" * 50)
-    print(f"train acc: {train_acc:.3f}")
     print(f"val acc:   {val_acc:.3f}")
 
     # classification report

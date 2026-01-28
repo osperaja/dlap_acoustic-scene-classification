@@ -33,5 +33,5 @@ training:
   devices: 1
 
 logging:
-  tb_log_dir: "~/dcase/tb_logs/"
-  ckpt_dir: "~/dcase/ckpts/"
+  tb_log_dir: "./data/tb_logs/"
+  ckpt_dir: "./data/ckpts/"
