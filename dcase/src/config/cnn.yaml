@@ -2,7 +2,7 @@ model: CNNModel
 
 data:
   sample_rate: 44100
-  batch_size: 64
+  batch_size: 128
   n_workers: 8
   mono: true
   multi_stream: false
