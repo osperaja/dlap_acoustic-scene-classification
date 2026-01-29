@@ -443,14 +443,14 @@ class EnsembleCNNModel(torch.nn.Module):
             )
 
         self.models = nn.ModuleDict({
-            'left': DualChannelCNNModel(**dccnn_config),
-            'right': DualChannelCNNModel(**dccnn_config),
-            'mid': DualChannelCNNModel(**dccnn_config),
-            'side': DualChannelCNNModel(**dccnn_config),
+            'stereo': DualChannelCNNModel(**dccnn_config),
+            # 'right': DualChannelCNNModel(**dccnn_config),
+            'ms': DualChannelCNNModel(**dccnn_config),
+            # 'side': DualChannelCNNModel(**dccnn_config),
             'harmonic': CNNModel(**cnn_config),
             'percussive': CNNModel(**cnn_config),
             'background': CNNModel(**cnn_config),
-            'foreground': CNNModel(**cnn_config)
+            # 'foreground': CNNModel(**cnn_config)
         })
 
         self.ensemble_weights = nn.Parameter(torch.ones(len(self.models)))
@@ -478,10 +478,8 @@ class EnsembleCNNModel(torch.nn.Module):
 
         # 1. Dual Channel models (require 2 inputs)
         pairs = {
-            'left': ('left', 'right'),
-            'right': ('right', 'left'),
-            'mid': ('mid', 'side'),
-            'side': ('side', 'mid'),
+            'stereo': ('left', 'right'),
+            'ms': ('mid', 'side'),
         }
 
         for name, (s1_key, s2_key) in pairs.items():
