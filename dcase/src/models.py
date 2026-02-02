@@ -104,7 +104,7 @@ class LinSeqModel(torch.nn.Module):
             n_label: int = 15,
             n_hidden_feats: int = 50,
             n_hidden_layer: int = 4,
-            spec_augment: bool = True,
+            spec_augment: bool = False,
             freq_mask_param: int = 10,
             time_mask_param: int = 20,
             n_freq_masks: int = 2,
@@ -131,11 +131,11 @@ class LinSeqModel(torch.nn.Module):
                 TimeMasking(time_mask_param) for _ in range(n_time_masks)
             ])
 
-        layers = [nn.Linear(n_mels, n_hidden_feats), nn.GELU(), nn.Dropout(dropout)]
+        layers = [nn.Linear(n_mels, n_hidden_feats), nn.ReLU(), nn.Dropout(dropout)]
 
         for _ in range(n_hidden_layer - 1):
             layers.append(nn.Linear(n_hidden_feats, n_hidden_feats))
-            layers.append(nn.GELU())
+            layers.append(nn.ReLU())
             layers.append(nn.Dropout(dropout))
 
         layers.append(nn.Linear(n_hidden_feats, n_label))
@@ -449,8 +449,8 @@ class EnsembleCNNModel(torch.nn.Module):
             # 'side': DualChannelCNNModel(**dccnn_config),
             'harmonic': CNNModel(**cnn_config),
             'percussive': CNNModel(**cnn_config),
-            'background': CNNModel(**cnn_config),
-            # 'foreground': CNNModel(**cnn_config)
+            # 'background': CNNModel(**cnn_config),
+            'foreground': CNNModel(**cnn_config)
         })
 
         self.ensemble_weights = nn.Parameter(torch.ones(len(self.models)))
