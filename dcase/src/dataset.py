@@ -17,6 +17,7 @@ class AcousticScenesDataset(torch.utils.data.Dataset):
             mono: bool = True,
             # base_data_path: str = '/data/baproj/dlap',
             base_data_path: str = './data/dcase',
+            normalize_audio: bool = False,
             multi_stream: bool = False,
             stream_cache_dir: str = None,
             resample_cache_dir: str = None,
@@ -36,6 +37,8 @@ class AcousticScenesDataset(torch.utils.data.Dataset):
         self.precompute_mel = precompute_mel
         self.mel_cache_dir = mel_cache_dir
         self.mel_config = mel_config or {}
+        self.dataset_name = dataset_name
+        self.normalize_audio = normalize_audio
 
         if multi_stream:
             from preprocessing import MultiStreamPreprocessor
@@ -106,14 +109,17 @@ class AcousticScenesDataset(torch.utils.data.Dataset):
             self.data_path + '/' + example['audio_path'], dtype=np.float32
         )  # (SAMPLES, CHANNEL)
 
+        if self.normalize_audio: audio_data = audio_data / (np.abs(audio_data).max() + 1e-8)
+
         # resample if needed
         if self.sample_rate is not None and self.sample_rate != audio_sample_rate:
             cached_audio = None
             if self.resample_cache_dir:
                 key = os.path.splitext(os.path.basename(example['audio_path']))[0]
+
                 cache_path = os.path.join(
                     self.resample_cache_dir,
-                    f"{key}_{audio_sample_rate}_to_{self.sample_rate}.npy"
+                    f"{self.dataset_name}_{key}_sr{self.sample_rate}.npy"
                 )
                 if os.path.exists(cache_path):
                     cached_audio = np.load(cache_path)
@@ -134,9 +140,12 @@ class AcousticScenesDataset(torch.utils.data.Dataset):
         if self.multi_stream:
             key = os.path.splitext(os.path.basename(example['audio_path']))[0]
             if self.precompute_mel:
-                cache_path = os.path.join(self.mel_cache_dir, f"{key}_{self._mel_cache_tag}.pt")
+                cache_path = os.path.join(
+                    self.mel_cache_dir,
+                    f"{self.dataset_name}_{key}_{self._mel_cache_tag}.pt"
+                )
                 if os.path.exists(cache_path):
-                    example['mels'] = torch.load(cache_path, map_location='cpu')
+                    example['mels'] = torch.load(cache_path, map_location='cpu', weights_only=True)
                 else:
                     streams = self.preprocessor.process(torch.from_numpy(audio_data.T).float(), cache_key=key)
                     with torch.no_grad():
