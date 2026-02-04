@@ -578,12 +578,12 @@ class CNNTCNModel(nn.Module):
         in_channels = 1
         for out_channels in cnn_channels:
             block = nn.Sequential(
+                nn.BatchNorm2d(in_channels),
+                nn.LeakyReLU(0.33),
                 nn.Conv2d(in_channels, out_channels, kernel_size=cnn_kernel_size, padding=1),
                 nn.BatchNorm2d(out_channels),
-                nn.ReLU(),
+                nn.LeakyReLU(0.33),
                 nn.Conv2d(out_channels, out_channels, kernel_size=cnn_kernel_size, padding=1),
-                nn.BatchNorm2d(out_channels),
-                nn.ReLU(),
                 nn.MaxPool2d(cnn_pool_size),
                 nn.Dropout2d(dropout),
             )
@@ -698,7 +698,7 @@ class TCNBlock(nn.Module):
         )
         self.bn2 = nn.BatchNorm1d(out_channels)
 
-        self.relu = nn.ReLU()
+        self.lrelu = nn.LeakyReLU(0.33)
         self.dropout = nn.Dropout(dropout)
 
         # Project input if channel dims differ
@@ -712,15 +712,15 @@ class TCNBlock(nn.Module):
 
         out = self.conv1(x)
         out = self.bn1(out)
-        out = self.relu(out)
+        out = self.lrelu(out)
         out = self.dropout(out)
 
         out = self.conv2(out)
         out = self.bn2(out)
-        out = self.relu(out)
+        out = self.lrelu(out)
         out = self.dropout(out)
 
-        return self.relu(out + residual)
+        return self.lrelu(out + residual)
 
 
 class SklearnAudioClassifier:
