@@ -81,7 +81,7 @@ def get_trainer(
     early_stop = DelayedStartEarlyStopping( # https://github.com/Lightning-AI/pytorch-lightning/issues/16881, https://github.com/samgelman
         start_epoch=100,
         monitor="val/accuracy",
-        patience=40,
+        patience=90,
         mode="max",
         verbose=True,
     )
@@ -112,17 +112,26 @@ if __name__ == "__main__":
     ModelClass = MODEL_REGISTRY[model_name]
     ExpClass = EXPERIMENT_REGISTRY[model_name]
 
+    global_seed = config.get('random_seed', None)
+
     # create model based on type
     if model_name == 'EnsembleCNNModel':
         model = ModelClass(
             cnn_config=config['network']['cnn_config'],
             dccnn_config=config['network']['dccnn_config'],
-            sample_rate=config['data']['sample_rate']
+            sample_rate=config['data']['sample_rate'],
+            random_seed=global_seed,
+            shared_mel=config['data']['shared_mel'],
+            classifier_hidden=config['network']['classifier_hidden'],
+            dropout=config['network']['dropout'],
         )
     else:
         config['network']['sample_rate'] = config['data']['sample_rate']
         config['network']['n_label'] = config['experiment']['n_label']
-        model = ModelClass(**config['network'])
+        if 'augmentation' in config:
+            config['network'].update(config['augmentation'])
+        model = ModelClass(**config['network'], random_seed=global_seed)
+        # model = ModelClass(**config['network'])
 
     dm = DM(**config['data'])
     exp = ExpClass(model=model, **config['experiment'])
