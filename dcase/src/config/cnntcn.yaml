@@ -5,6 +5,7 @@ data:
   batch_size: 64
   n_workers: 8
   mono: true
+  normalize_audio: false
   multi_stream: false
   # base_data_path: '/data/baproj/dlap'
   base_data_path: './data/dcase'
@@ -18,10 +19,11 @@ experiment:
 
 network:
   n_fft: 2048
-  n_mels: 64
+  n_mels: 128
   f_min: 0
   f_max: 22050
   dropout: 0.15
+#  random_seed: 0
   
   # CNN parameters
   cnn_channels: [32, 64]
@@ -37,12 +39,12 @@ network:
 
 augmentation:
   spec_augment: true
-  freq_mask_param: 15        
-  time_mask_param: 25
+  freq_mask_param: 20
+  time_mask_param: 30
   n_freq_masks: 2
   n_time_masks: 2
-  use_mixup: false
-  mixup_alpha: 0.3           
+  use_mixup: true
+  mixup_alpha: 0.3
 
 training:
   max_epochs: 300

@@ -6,6 +6,7 @@ data:
   n_workers: 16
   mono: true
   base_data_path: './data/dcase'
+  normalize_audio: false
   multi_stream: false
 
 experiment:
@@ -21,10 +22,11 @@ network:
   n_mels: 40
   n_context: 5
   n_hidden: 50
-  n_hidden_layers: 3
-  dropout: 0.3
+  n_hidden_layers: 2
+  dropout: 0.2
   f_min: 0
   f_max: 22050
+#  random_seed: 0
 
 training:
   max_epochs: 200

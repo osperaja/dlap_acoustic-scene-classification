@@ -5,6 +5,7 @@ data:
   batch_size: 128
   n_workers: 8
   mono: true
+  normalize_audio: false
   multi_stream: false
   base_data_path: './data/dcase'
 
@@ -18,22 +19,24 @@ experiment:
 network:
   n_fft: 2048
   n_mels: 128
-  dropout: 0.0
+  dropout: 0.5
   f_min: 0
   f_max: 22050
-  cnn_conv_channels: [ 32, 64, 128, 256 ]
+  conv_channels: [ 32, 64, 128, 256 ]
   last_layer_pooling: true
   pooling: [ 2,2 ]
+  use_classifier: true
   classifier_hidden: 512
+#  random_seed: 0
 
 augmentation:
-  cnn_spec_augment: true
-  cnn_freq_mask_param: 15
-  cnn_time_mask_param: 20
-  cnn_n_freq_masks: 2
-  cnn_n_time_masks: 2
-  cnn_use_mixup: false
-  cnn_mixup_alpha: 0.05
+  spec_augment: true
+  freq_mask_param: 15
+  time_mask_param: 20
+  n_freq_masks: 2
+  n_time_masks: 2
+  use_mixup: true
+  mixup_alpha: 0.05
 
 training:
   max_epochs: 200
