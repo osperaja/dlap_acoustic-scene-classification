@@ -24,17 +24,86 @@ def build_final_estimator(cfg):
     raise ValueError(f"Unknown final_estimator type: {cfg['type']}")
 
 def plot_confusion_matrix(y_true, y_pred, class_names, save_path=None):
-    cm = confusion_matrix(y_true, y_pred)
-    plt.figure(figsize=(12, 10))
-    sns.heatmap(cm, annot=True, fmt='d', cmap='Blues',
-                xticklabels=class_names, yticklabels=class_names)
-    plt.xlabel('pred')
-    plt.ylabel('true')
-    plt.title('conf matrix')
-    plt.tight_layout()
+    cm = confusion_matrix(y_true, y_pred, labels=range(len(class_names)))
+
+    cm_normalized = cm.astype('float') / cm.sum(axis=1)[:, np.newaxis]
+
+    fig, ax = plt.subplots(figsize=(8, 8))
+    im = ax.imshow(cm_normalized, interpolation='nearest', cmap=plt.cm.Blues)
+    ax.figure.colorbar(im, ax=ax)
+
+    ax.set(xticks=np.arange(cm.shape[1]),
+           yticks=np.arange(cm.shape[0]),
+           xticklabels=class_names, yticklabels=class_names,
+           ylabel='True label',
+           xlabel='Predicted label',
+           title='Confusion Matrix')
+
+    plt.setp(ax.get_xticklabels(), rotation=45, ha="right", rotation_mode="anchor")
+
+    fmt = ".2f"
+    thresh = cm_normalized.max() / 2.
+    for i in range(cm_normalized.shape[0]):
+        for j in range(cm_normalized.shape[1]):
+            ax.text(j, i, format(cm_normalized[i, j], fmt),
+                    ha="center", va="center",
+                    color="white" if cm_normalized[i, j] > thresh else "black")
+
+    fig.tight_layout()
     if save_path:
-        plt.savefig(save_path)
-        print(f"saved conf matrix to {save_path}")
+        plt.savefig(save_path, bbox_inches='tight', dpi=300)
+    plt.show()
+
+def plot_confusion_matrix(y_true, y_pred, class_names,
+                          save_path=None,
+                          min_confusion=0.10):
+    """
+    Normalised confusion matrix showing only classes with max misclassification >= min_confusion.
+    """
+    from sklearn.metrics import confusion_matrix
+    import matplotlib.pyplot as plt
+    import numpy as np
+
+    cm = confusion_matrix(y_true, y_pred, labels=range(len(class_names)))
+    cm_normalized = cm.astype('float') / cm.sum(axis=1)[:, np.newaxis]
+
+    # Only keep rows/cols where max misclassification >= threshold
+    # Diagonal counts as correct, so we check off-diagonal max
+    off_diag_max = cm_normalized.copy()
+    np.fill_diagonal(off_diag_max, 0)
+    keep_rows = np.where(off_diag_max.max(axis=1) >= min_confusion)[0]
+    keep_cols = np.where(off_diag_max.max(axis=0) >= min_confusion)[0]
+
+    # filter cm and class names
+    cm_filtered = cm_normalized[np.ix_(keep_rows, keep_cols)]
+    class_names_filtered = [class_names[i] for i in keep_rows]
+
+    # plot
+    fig, ax = plt.subplots(figsize=(len(class_names_filtered), len(class_names_filtered)))
+    im = ax.imshow(cm_filtered, interpolation='nearest', cmap=plt.cm.Blues)
+    # ax.figure.colorbar(im, ax=ax)
+
+    ax.set(xticks=np.arange(len(class_names_filtered)),
+           yticks=np.arange(len(class_names_filtered)),
+           xticklabels=class_names_filtered,
+           yticklabels=class_names_filtered,
+           ylabel='True label',
+           xlabel='Predicted label')
+
+    plt.setp(ax.get_xticklabels(), rotation=45, ha="right", rotation_mode="anchor")
+
+    fmt = ".2f"
+    thresh = cm_filtered.max() / 2.
+    for i in range(cm_filtered.shape[0]):
+        for j in range(cm_filtered.shape[1]):
+            if cm_filtered[i, j] >= min_confusion:
+                ax.text(j, i, format(cm_filtered[i, j], fmt),
+                        ha="center", va="center",
+                        color="white" if cm_filtered[i, j] > thresh else "black")
+
+    fig.tight_layout()
+    if save_path:
+        plt.savefig(save_path, bbox_inches='tight', dpi=300)
     plt.show()
 
 def build_base_classifier(cfg, global_config):
@@ -134,8 +203,8 @@ def main():
     print("\nClassification Report:")
     print(classification_report(y_val, val_pred, target_names=class_names))
 
-    plot_confusion_matrix(y_val, val_pred, class_names,
-                          save_path=config.get("logging", {}).get("cm_path"))
+    plot_confusion_matrix(y_val, val_pred, class_names, save_path=config.get("logging", {}).get("cm_path"))
+    plot_confusion_matrix_thresh(y_val, val_pred, class_names, save_path=config.get("logging", {}).get("cm_path"))
 
     timestamp = datetime.now().strftime("%Y%m%d_%H%M%S")
     model_name = f"{config['model']}_{timestamp}-val_acc={val_acc:.2f}"
