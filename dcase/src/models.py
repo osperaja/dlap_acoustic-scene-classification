@@ -18,6 +18,24 @@ from sklearn.preprocessing import StandardScaler
 from sklearn.pipeline import Pipeline
 from sklearn.base import BaseEstimator, ClassifierMixin
 
+import random
+from typing import Optional
+
+def _set_and_print_seed(owner_name: str, seed: Optional[int] = None) -> int:
+    """Set torch / numpy / python random seeds and print the chosen seed."""
+    if seed is None:
+        seed = np.random.randint(0, 2**31 - 1)
+    seed = int(seed)
+    torch.manual_seed(seed)
+    try:
+        torch.cuda.manual_seed_all(seed)
+    except Exception:
+        pass
+    np.random.seed(seed)
+    random.seed(seed)
+    print(f"seed for {owner_name}: {seed}")
+    return seed
+
 
 class BaselineModel(torch.nn.Module):
     """DCASE baseline MLP model.
@@ -40,8 +58,10 @@ class BaselineModel(torch.nn.Module):
             n_hidden_layers: int = 2,
             dropout: float = 0.2,
             n_label: int = 15,
+            random_seed: Optional[int] = None,
     ):
         super(BaselineModel, self).__init__()
+        self.seed = _set_and_print_seed(self.__class__.__name__, random_seed)
 
         self.n_context = n_context
         self.n_mels = n_mels
@@ -109,8 +129,10 @@ class LinSeqModel(torch.nn.Module):
             time_mask_param: int = 20,
             n_freq_masks: int = 2,
             n_time_masks: int = 2,
+            random_seed: Optional[int] = None,
     ):
         super(LinSeqModel, self).__init__()
+        self.seed = _set_and_print_seed(self.__class__.__name__, random_seed)
 
         self.spec_augment = spec_augment
 
@@ -166,33 +188,37 @@ class LinSeqModel(torch.nn.Module):
 
 class CNNModel(torch.nn.Module):
     """
-    CNN for spectrogram classification with SpecAugment and Mixup.
+    CNN for spectrogram classification with SpecAugment.
     """
 
     def __init__(
             self,
+            n_mels: int,
+            dropout: float,
+            n_label: int,
+            pooling,
+            last_layer_pooling,
+            conv_channels: list,
+            classifier_hidden: int,
+            spec_augment: bool,
+            freq_mask_param: int,
+            time_mask_param: int,
+            n_freq_masks: int,
+            n_time_masks: int,
+            use_mixup: bool,
+            mixup_alpha: float,
+            use_classifier: bool,
+            random_seed: Optional[int] = None,
             sample_rate: int = 44100,
             n_fft: int = 2048,
             f_min: float = 0.0,
             f_max: float = 22050.0,
-            n_mels: int = 40,
-            dropout: float = 0.3,
-            n_label: int = 15,
-            pooling=[3, 3],
-            last_layer_pooling=False,
-            cnn_conv_channels: list = None,
-            classifier_hidden: int = 128,
-            cnn_mixup_alpha: float = 0.2,
-            cnn_use_mixup: bool = True,
-            cnn_spec_augment: bool = True,
-            cnn_freq_mask_param: int = 15,
-            cnn_time_mask_param: int = 20,
-            cnn_n_freq_masks: int = 2,
-            cnn_n_time_masks: int = 2,
     ):
         super(CNNModel, self).__init__()
+        self.seed = _set_and_print_seed(self.__class__.__name__, random_seed)
+        self.use_classifier = use_classifier
 
-        self.conv_channels = cnn_conv_channels
+        self.conv_channels = conv_channels
 
         if self.conv_channels is None:
             self.conv_channels = [64, 128, 256]
@@ -200,13 +226,13 @@ class CNNModel(torch.nn.Module):
         self.n_mels = n_mels
         self.last_layer_pooling = last_layer_pooling
         self.pooling = pooling
-        self.spec_augment = cnn_spec_augment
-        self.use_mixup = cnn_use_mixup
-        self.mixup_alpha = cnn_mixup_alpha
-        self.freq_mask_param = cnn_freq_mask_param
-        self.time_mask_param = cnn_time_mask_param
-        self.n_freq_masks = cnn_n_freq_masks
-        self.n_time_masks = cnn_n_time_masks
+        self.spec_augment = spec_augment
+        self.use_mixup = use_mixup
+        self.mixup_alpha = mixup_alpha
+        self.freq_mask_param = freq_mask_param
+        self.time_mask_param = time_mask_param
+        self.n_freq_masks = n_freq_masks
+        self.n_time_masks = n_time_masks
 
         self.mel_transform = MelSpectrogram(
             sample_rate=sample_rate,
@@ -239,15 +265,14 @@ class CNNModel(torch.nn.Module):
             ])
             if i < len(self.conv_channels) - 1 or self.last_layer_pooling:
                 blocks.append(nn.MaxPool2d(self.pooling[0], self.pooling[1]))
-            blocks.append(nn.Dropout2d(dropout))
             in_channels = out_channels
 
         self.conv_blocks = nn.Sequential(*blocks)
         self.global_pool = nn.AdaptiveAvgPool2d(1)
-        self.classifier = nn.Sequential(
+        if use_classifier: self.classifier = nn.Sequential(
             nn.Linear(self.conv_channels[-1], classifier_hidden),
             nn.LeakyReLU(0.33),
-            nn.Dropout(dropout*2),
+            nn.Dropout(dropout),
             nn.Linear(classifier_hidden, n_label),
         )
 
@@ -266,7 +291,6 @@ class CNNModel(torch.nn.Module):
             labels: torch.Tensor = None,  # (BATCH,) for mixup
             precomputed_mel: torch.Tensor = None,  # (BATCH, 1, n_mels, FRAMES)
     ) -> dict:
-        # (BATCH, 1, n_mels, FRAMES)
         if precomputed_mel is not None:
             features = precomputed_mel
         else:
@@ -279,7 +303,6 @@ class CNNModel(torch.nn.Module):
             for time_mask in self.time_masks:
                 features = time_mask(features)
 
-        # mixup during training
         y_a, y_b, lam = None, None, None
         if self.use_mixup and self.training and labels is not None:
             features, y_a, y_b, lam = self.mixup_data(features, labels)
@@ -287,6 +310,10 @@ class CNNModel(torch.nn.Module):
         x = self.conv_blocks(features)
         x = self.global_pool(x)
         x = x.view(x.size(0), -1)
+
+        if not self.use_classifier:
+            return {"features": x}
+
         logits = self.classifier(x)
 
         if self.training and y_a is not None:
@@ -298,39 +325,43 @@ class DualChannelCNNModel(torch.nn.Module):
     """2-conv model from paper: processes 2 mel channels separately then concatenates."""
 
     def __init__(self,
+                 n_mels: int,
+                 dropout: float,
+                 n_label: int,
+                 pooling,
+                 last_layer_pooling,
+                 conv_channels: list,
+                 classifier_hidden: int,
+                 spec_augment,
+                 freq_mask_param,
+                 time_mask_param,
+                 n_freq_masks,
+                 n_time_masks,
+                 use_mixup,
+                 mixup_alpha,
+                 use_classifier: bool,
+                 random_seed: Optional[int] = None,
                  sample_rate: int = 44100,
                  n_fft: int = 2048,
-                 n_mels: int = 40,
-                 dropout: float = 0.3,
-                 n_label: int = 15,
-                 pooling=[3, 3],
-                 last_layer_pooling=False,
-                 dccnn_conv_channels: list = None,
-                 classifier_hidden: int = 1024,
-                 dccnn_spec_augment=False,
-                 dccnn_freq_mask_param=15,
-                 dccnn_time_mask_param=20,
-                 dccnn_n_freq_masks=2,
-                 dccnn_n_time_masks=2,
-                 dccnn_use_mixup=False,
-                 dccnn_mixup_alpha=0.2,
                  ):
         super().__init__()
+        self.seed = _set_and_print_seed(self.__class__.__name__, random_seed)
 
-        self.conv_channels = dccnn_conv_channels
+        self.conv_channels = conv_channels
+        self.use_classifier = use_classifier
 
         if self.conv_channels is None:
             self.conv_channels = [32, 64, 128, 256]
 
         self.pooling = pooling
         self.last_layer_pooling = last_layer_pooling
-        self.spec_augment = dccnn_spec_augment
-        self.use_mixup = dccnn_use_mixup
-        self.mixup_alpha = dccnn_mixup_alpha
-        self.freq_mask_param = dccnn_freq_mask_param
-        self.time_mask_param = dccnn_time_mask_param
-        self.n_freq_masks = dccnn_n_freq_masks
-        self.n_time_masks = dccnn_n_time_masks
+        self.spec_augment = spec_augment
+        self.use_mixup = use_mixup
+        self.mixup_alpha = mixup_alpha
+        self.freq_mask_param = freq_mask_param
+        self.time_mask_param = time_mask_param
+        self.n_freq_masks = n_freq_masks
+        self.n_time_masks = n_time_masks
 
         self.mel_transform = MelSpectrogram(
             sample_rate=sample_rate,
@@ -348,20 +379,21 @@ class DualChannelCNNModel(torch.nn.Module):
             ])
 
         # two separate conv branches (one per channel)
-        self.branch1 = self._make_branch(self.conv_channels, dropout)
-        self.branch2 = self._make_branch(self.conv_channels, dropout)
+        self.branch1 = self._make_branch(self.conv_channels)
+        self.branch2 = self._make_branch(self.conv_channels)
 
         self.global_pool = nn.AdaptiveAvgPool2d(1)
 
         # concat both branches -> 2x final conv channels
-        self.classifier = nn.Sequential(
+        if use_classifier: self.classifier = nn.Sequential(
             nn.Linear(self.conv_channels[-1] * 2, classifier_hidden),
             nn.LeakyReLU(0.33),
-            nn.Dropout(dropout*2),
+            nn.Dropout(dropout),
             nn.Linear(classifier_hidden, n_label),
         )
+        else: self.classifier = None
 
-    def _make_branch(self, conv_channels, dropout):
+    def _make_branch(self, conv_channels):
         blocks = []
         in_ch = 1
         for i, out_ch in enumerate(conv_channels):
@@ -369,12 +401,13 @@ class DualChannelCNNModel(torch.nn.Module):
                 nn.BatchNorm2d(in_ch),
                 nn.LeakyReLU(0.33),
                 nn.Conv2d(in_ch, out_ch, kernel_size=3, padding=1),
+                nn.BatchNorm2d(out_ch),
+                nn.LeakyReLU(0.33),
+                nn.Conv2d(out_ch, out_ch, kernel_size=3, padding=1),
             ])
 
-            if i < len(self.conv_channels) - 1 or self.last_layer_pooling:
+            if i < len(conv_channels) - 1 or self.last_layer_pooling:
                 blocks.append(nn.MaxPool2d(self.pooling[0], self.pooling[1]))
-
-            blocks.append(nn.Dropout2d(dropout))
             in_ch = out_ch
         return nn.Sequential(*blocks)
 
@@ -395,13 +428,12 @@ class DualChannelCNNModel(torch.nn.Module):
             precomputed_mel1: torch.Tensor = None,
             precomputed_mel2: torch.Tensor = None,
     ):
-        # each input: (B, 1, TIME)
         if precomputed_mel1 is not None and precomputed_mel2 is not None:
             mel1 = precomputed_mel1
             mel2 = precomputed_mel2
         else:
             with torch.no_grad():
-                mel1 = torch.log(self.mel_transform(audio_ch1) + 1e-6)  # (B, 1, mels, frames)
+                mel1 = torch.log(self.mel_transform(audio_ch1) + 1e-6)
                 mel2 = torch.log(self.mel_transform(audio_ch2) + 1e-6)
 
         if self.spec_augment and self.training:
@@ -412,22 +444,32 @@ class DualChannelCNNModel(torch.nn.Module):
                 mel1 = time_mask(mel1)
                 mel2 = time_mask(mel2)
 
-        # mixup during training
         if self.use_mixup and self.training and labels is not None:
             mel1, mel2, y_a, y_b, lam = self.mixup_dual(mel1, mel2, labels)
 
         feat1 = self.global_pool(self.branch1(mel1)).flatten(1)
         feat2 = self.global_pool(self.branch2(mel2)).flatten(1)
-
         combined = torch.cat([feat1, feat2], dim=1)
-        logits = self.classifier(combined)
 
+        if not self.use_classifier:
+            return {"features": combined}
+
+        logits = self.classifier(combined)
         return {"logits": logits}
 
 
 class EnsembleCNNModel(torch.nn.Module):
-    def __init__(self, cnn_config: dict, dccnn_config: dict, sample_rate: int = 44100, shared_mel: bool = True):
+    def __init__(self,
+                 cnn_config: dict,
+                 dccnn_config: dict,
+                 sample_rate: int,
+                 shared_mel: bool,
+                 classifier_hidden: int,
+                 dropout: float,
+                 random_seed: Optional[int] = None,
+                ):
         super().__init__()
+        base_seed = _set_and_print_seed(self.__class__.__name__, random_seed)
 
         self.preprocessor = MultiStreamPreprocessor(sample_rate=sample_rate)
         self.shared_mel = shared_mel
@@ -443,21 +485,26 @@ class EnsembleCNNModel(torch.nn.Module):
             )
 
         self.models = nn.ModuleDict({
-            'stereo': DualChannelCNNModel(**dccnn_config),
-            # 'right': DualChannelCNNModel(**dccnn_config),
-            'ms': DualChannelCNNModel(**dccnn_config),
-            # 'side': DualChannelCNNModel(**dccnn_config),
-            'harmonic': CNNModel(**cnn_config),
-            'percussive': CNNModel(**cnn_config),
-            # 'background': CNNModel(**cnn_config),
-            'foreground': CNNModel(**cnn_config)
+            'stereo': DualChannelCNNModel(**{**dccnn_config, 'random_seed': base_seed}),
+            'ms': DualChannelCNNModel(**{**dccnn_config, 'random_seed': base_seed + 1}),
+            'harmonic': CNNModel(**{**cnn_config, 'random_seed': base_seed + 2}),
+            'percussive': CNNModel(**{**cnn_config, 'random_seed': base_seed + 3}),
         })
 
-        self.ensemble_weights = nn.Parameter(torch.ones(len(self.models)))
+        cnn_feat_dim = cnn_config.get('conv_channels')[-1]
+        dccnn_feat_dim = dccnn_config.get('conv_channels')[-1] * 2
+        n_label = cnn_config.get('n_label', 15)
+
+        total_feat_dim = (dccnn_feat_dim * 2) + (cnn_feat_dim * 2)
+
+        self.classifier = nn.Sequential(
+            nn.Linear(total_feat_dim, classifier_hidden),
+            nn.LeakyReLU(0.33),
+            nn.Dropout(dropout),
+            nn.Linear(classifier_hidden, n_label),
+        )
 
     def forward(self, audio_stereo: torch.Tensor, labels=None):
-        # audio_stereo: (B, 2, TIME) or dict from dataset
-
         batch_streams = None
         log_mels = {}
         if isinstance(audio_stereo, dict):
@@ -474,9 +521,10 @@ class EnsembleCNNModel(torch.nn.Module):
         if self.shared_mel and batch_streams is not None:
             for key, stream in batch_streams.items():
                 with torch.no_grad():
-                    log_mels[key] = torch.log(self.mel_transform(stream) + 1e-6)
+                    mel = torch.log(self.mel_transform(stream) + 1e-6)
+                    mel = (mel - mel.mean(dim=-1, keepdim=True)) / (mel.std(dim=-1, keepdim=True) + 1e-6)
+                    log_mels[key] = mel
 
-        # 1. Dual Channel models (require 2 inputs)
         pairs = {
             'stereo': ('left', 'right'),
             'ms': ('mid', 'side'),
@@ -489,21 +537,20 @@ class EnsembleCNNModel(torch.nn.Module):
                 s1 = batch_streams[s1_key]
                 s2 = batch_streams[s2_key]
                 out = self.models[name](s1, s2, labels)
-            all_logits.append(out['logits'])
+            all_logits.append(out['features'])
 
-        # 2. Single Channel models
-        for name in ['harmonic', 'percussive', 'background']:
+        for name in ['harmonic', 'percussive']:
             if log_mels:
-                out = self.models[name](None, labels, precomputed_mel=log_mels[name])
+                out = self.models[name](None, precomputed_mel=log_mels[name])
             else:
-                out = self.models[name](batch_streams[name], labels)
-            all_logits.append(out['logits'])
+                out = self.models[name](batch_streams[name])
+            feat = out['features']
+            all_logits.append(feat)
 
-        logits_stack = torch.stack(all_logits)  # (num_models, B, num_classes)
-        weights = torch.softmax(self.ensemble_weights, dim=0)  # (num_models,)
-        weighted_logits = logits_stack * weights[:, None, None]
-        return {'logits': weighted_logits.sum(dim=0)} # WEIGH MODELS
+        combined = torch.cat(all_logits, dim=1)
+        logits = self.classifier(combined)
 
+        return {'logits': logits}
 
 class CNNTCNModel(nn.Module):
     """
@@ -516,33 +563,36 @@ class CNNTCNModel(nn.Module):
 
     def __init__(
             self,
-            sample_rate: int = 44100,
-            n_fft: int = 2048,
-            n_mels: int = 128,
-            f_min: float = 0.0,
-            f_max: float = 22050.0,
 
-            cnn_channels: list = None,
-            cnn_kernel_size: tuple = (3, 3),
-            cnn_pool_size: tuple = (2, 2),
+            sample_rate: int,
+            n_fft: int,
+            n_mels: int,
+            f_min: float,
+            f_max: float,
 
-            tcn_channels: list = None,
-            tcn_kernel_size: int = 3,
+            cnn_channels: list,
+            cnn_kernel_size: tuple,
+            cnn_pool_size: tuple,
 
-            dropout: float = 0.3,
+            tcn_channels: list,
+            tcn_kernel_size: int,
 
-            classifier_hidden: int = 128,
-            n_label: int = 15,
+            dropout: float,
 
-            spec_augment: bool = True,
-            freq_mask_param: int = 20,
-            time_mask_param: int = 30,
-            n_freq_masks: int = 2,
-            n_time_masks: int = 2,
-            use_mixup: bool = True,
-            mixup_alpha: float = 0.3,
+            classifier_hidden: int,
+            n_label: int,
+
+            spec_augment: bool,
+            freq_mask_param: int,
+            time_mask_param: int,
+            n_freq_masks: int,
+            n_time_masks: int,
+            use_mixup: bool,
+            mixup_alpha: float,
+            random_seed: Optional[int] = None,
     ):
         super(CNNTCNModel, self).__init__()
+        self.seed = _set_and_print_seed(self.__class__.__name__, random_seed)
 
         if cnn_channels is None:
             cnn_channels = [32, 64]
@@ -656,7 +706,7 @@ class CNNTCNModel(nn.Module):
         for tcn_block in self.tcn_blocks:
             x = tcn_block(x)
 
-            # Global pooling over time
+        # Global pooling over time
         x = self.global_pool(x).squeeze(-1)
 
         logits = self.classifier(x)
@@ -664,7 +714,6 @@ class CNNTCNModel(nn.Module):
         if self.training and y_a is not None:
             return {"logits": logits, "y_a": y_a, "y_b": y_b, "lam": lam}
         return {"logits": logits}
-
 
 class TCNBlock(nn.Module):
     """
