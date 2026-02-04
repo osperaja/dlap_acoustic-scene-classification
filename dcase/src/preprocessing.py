@@ -50,13 +50,12 @@ class MultiStreamPreprocessor:
         else:
             harmonic, percussive = self._get_hpss(mid, cache_key)
 
-        bg = self._moving_average_fast(mid, win_size=int(2 * self.sample_rate))
-        fg = mid - bg
+        # bg = self._moving_average_fast(mid, win_size=int(2 * self.sample_rate))
+        # fg = mid - bg
 
         streams = {
             'left': L, 'right': R, 'mid': mid, 'side': side,
-            'harmonic': harmonic.to(device), 'percussive': percussive.to(device),
-            'background': bg, 'foreground': fg
+            'harmonic': harmonic.to(device), 'percussive': percussive.to(device)
         }
         if self.cache_dir and cache_key:
             os.makedirs(self.cache_dir, exist_ok=True)
