@@ -17,8 +17,11 @@ The project supports multiple model architectures via YAML configuration files. 
 |----------------------------------|-------------------------|------------------------------------------------------------------------------|
 | `BaselineModel`                  | `baseline.yaml`         | DCASE baseline MLP with 5-frame context (200 input features)                 |
 | `LinSeqModel`                    | `linseq.yaml`           | Extended linear sequential model with SpecAugment                            |
-| `CNNModel`                       | `cnn.yaml`              | CNN with optional SpecAugment and Mixup augmentation                         |
-| `CNNTCNModel`                    | `cnntcn.yaml`           | TCN with optional SpecAugment and Mixup augmentation                         |
+| `CNNModel`                       | `cnn.yaml`              | CNN with optional SpecAugment and Mixup                         |
+| `DualChannelCNNModel`                       | `dccnn_hpss.yaml`              | CNN with optional SpecAugment and Mixup on harmonic percussive separated sound                          |
+| `DualChannelCNNModel`                       | `dccnn_ms.yaml`              | CNN with optional SpecAugment and Mixup on spatial sound                          |
+| `DualChannelCNNModel`                       | `dccnn_stereo.yaml`              | Dual channel CNN with optional SpecAugment and Mixup on stereo sound                         |
+| `CNNTCNModel`                    | `cnntcn.yaml`           | CNN-TCN hybrid with optional SpecAugment and Mixup                          |
 | `EnsembleCNNModel`               | `cnn_ensemble.yaml`     | Multi-Stream CNN Ensemble with optional SpecAugment and Mixup and SpecAugment |
 | `SklearnAudioClassifier`         | `random_forest.yaml`    | Random Forest on mel spectrogram statistics                                  |
 | `SklearnAudioClassifier`         | `pca_svm.yaml`          | PCA + SVM pipeline on mel spectrogram statistics                             |
@@ -31,6 +34,10 @@ python3 dcase/src/train.py --config dcase/src/config/baseline.yaml
 python3 dcase/src/train.py --config dcase/src/config/linseq.yaml
 python3 dcase/src/train.py --config dcase/src/config/cnn.yaml
 python3 dcase/src/train.py --config dcase/src/config/cnn_ensemble.yaml
+python3 dcase/src/train.py --config dcase/src/config/cnntcn.yaml
+python3 dcase/src/train.py --config dcase/src/config/dccnn_hpss.yaml
+python3 dcase/src/train.py --config dcase/src/config/dccnn_ms.yaml
+python3 dcase/src/train.py --config dcase/src/config/dccnn_stereo.yaml
 ```
 
 ### Sklearn Models
