@@ -18,8 +18,8 @@ The project supports multiple model architectures via YAML configuration files. 
 | `BaselineModel`                  | `baseline.yaml`         | DCASE baseline MLP with 5-frame context (200 input features)                 |
 | `LinSeqModel`                    | `linseq.yaml`           | Extended linear sequential model with SpecAugment                            |
 | `CNNModel`                       | `cnn.yaml`              | CNN with optional SpecAugment and Mixup                         |
-| `DualChannelCNNModel`                       | `dccnn_hpss.yaml`              | CNN with optional SpecAugment and Mixup on harmonic percussive separated sound                          |
-| `DualChannelCNNModel`                       | `dccnn_ms.yaml`              | CNN with optional SpecAugment and Mixup on spatial sound                          |
+| `DualChannelCNNModel`                       | `dccnn_hpss.yaml`              | Dual channel CNN with optional SpecAugment and Mixup on harmonic percussive separated sound                          |
+| `DualChannelCNNModel`                       | `dccnn_ms.yaml`              | Dual channel CNN with optional SpecAugment and Mixup on spatial sound                          |
 | `DualChannelCNNModel`                       | `dccnn_stereo.yaml`              | Dual channel CNN with optional SpecAugment and Mixup on stereo sound                         |
 | `CNNTCNModel`                    | `cnntcn.yaml`           | CNN-TCN hybrid with optional SpecAugment and Mixup                          |
 | `EnsembleCNNModel`               | `cnn_ensemble.yaml`     | Multi-Stream CNN on pre-trained CNN models |
