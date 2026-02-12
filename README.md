@@ -22,7 +22,7 @@ The project supports multiple model architectures via YAML configuration files. 
 | `DualChannelCNNModel`                       | `dccnn_ms.yaml`              | CNN with optional SpecAugment and Mixup on spatial sound                          |
 | `DualChannelCNNModel`                       | `dccnn_stereo.yaml`              | Dual channel CNN with optional SpecAugment and Mixup on stereo sound                         |
 | `CNNTCNModel`                    | `cnntcn.yaml`           | CNN-TCN hybrid with optional SpecAugment and Mixup                          |
-| `EnsembleCNNModel`               | `cnn_ensemble.yaml`     | Multi-Stream CNN Ensemble with optional SpecAugment and Mixup and SpecAugment |
+| `EnsembleCNNModel`               | `cnn_ensemble.yaml`     | Multi-Stream CNN on pre-trained CNN models |
 | `SklearnAudioClassifier`         | `random_forest.yaml`    | Random Forest on mel spectrogram statistics                                  |
 | `SklearnAudioClassifier`         | `pca_svm.yaml`          | PCA + SVM pipeline on mel spectrogram statistics                             |
 | `SklearnAudioEnsembleClassifier` | `sklearn_ensemble.yaml` | Random Forest & PCA + SVM pipeline ensemble on mel spectrogram statistics    |
