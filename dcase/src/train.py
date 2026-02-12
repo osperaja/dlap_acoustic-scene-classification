@@ -7,12 +7,12 @@ import yaml
 from torch.multiprocessing import set_start_method
 try:
     from .datamodule import AcousticScenesDatamodule as DM
-    from .models import BaselineModel, LinSeqModel, CNNModel, EnsembleCNNModel, CNNTCNModel
+    from .models import BaselineModel, LinSeqModel, CNNModel, EnsembleCNNModel, CNNTCNModel, DualChannelCNNModel
     from .baseline_experiment import BaselineExperiment as BLExp
     from .cnn_experiment import CNNExperiment as CNNExp
 except ImportError:
     from datamodule import AcousticScenesDatamodule as DM
-    from models import BaselineModel, LinSeqModel, CNNModel, EnsembleCNNModel, CNNTCNModel
+    from models import BaselineModel, LinSeqModel, CNNModel, EnsembleCNNModel, CNNTCNModel, DualChannelCNNModel
     from baseline_experiment import BaselineExperiment as BLExp
     from cnn_experiment import CNNExperiment as CNNExp
 
@@ -20,6 +20,7 @@ MODEL_REGISTRY = {
     'BaselineModel': BaselineModel,
     'LinSeqModel': LinSeqModel,
     'CNNModel': CNNModel,
+    'DualChannelCNNModel': DualChannelCNNModel,
     'EnsembleCNNModel': EnsembleCNNModel,
     'CNNTCNModel': CNNTCNModel,
 }
@@ -28,10 +29,10 @@ EXPERIMENT_REGISTRY = {
     'BaselineModel': BLExp,
     'LinSeqModel': BLExp,
     'CNNModel': CNNExp,
+    'DualChannelCNNModel': CNNExp,
     'EnsembleCNNModel': CNNExp,
     'CNNTCNModel': CNNExp,
 }
-
 
 class DelayedStartEarlyStopping(EarlyStopping):
     def __init__(self, start_epoch, *args, **kwargs):
@@ -95,6 +96,7 @@ def get_trainer(
         precision=precision,
         accumulate_grad_batches=accumulate_grad_batches,
         callbacks=[checkpoint_callback, ModelSummary(max_depth=4), early_stop],
+        log_every_n_steps=36
     )
 
 
@@ -124,6 +126,8 @@ if __name__ == "__main__":
             shared_mel=config['data']['shared_mel'],
             classifier_hidden=config['network']['classifier_hidden'],
             dropout=config['network']['dropout'],
+            pretrained_checkpoints=config['network'].get('pretrained_checkpoints'),
+            freeze_submodels=config['network'].get('freeze_submodels', False),
         )
     else:
         config['network']['sample_rate'] = config['data']['sample_rate']

@@ -24,6 +24,8 @@ class AcousticScenesDataset(torch.utils.data.Dataset):
             precompute_mel: bool = False,
             mel_cache_dir: str = None,
             mel_config: dict = None,
+            input_stream: str = None,
+            input_channels: list = None,
     ):
         super(AcousticScenesDataset, self).__init__()
 
@@ -39,6 +41,8 @@ class AcousticScenesDataset(torch.utils.data.Dataset):
         self.mel_config = mel_config or {}
         self.dataset_name = dataset_name
         self.normalize_audio = normalize_audio
+        self.input_stream = input_stream
+        self.input_channels = input_channels
 
         if multi_stream:
             from preprocessing import MultiStreamPreprocessor
@@ -109,14 +113,14 @@ class AcousticScenesDataset(torch.utils.data.Dataset):
             self.data_path + '/' + example['audio_path'], dtype=np.float32
         )  # (SAMPLES, CHANNEL)
 
-        if self.normalize_audio: audio_data = audio_data / (np.abs(audio_data).max() + 1e-8)
+        if self.normalize_audio:
+            audio_data = audio_data / (np.abs(audio_data).max() + 1e-8)
 
         # resample if needed
         if self.sample_rate is not None and self.sample_rate != audio_sample_rate:
             cached_audio = None
             if self.resample_cache_dir:
                 key = os.path.splitext(os.path.basename(example['audio_path']))[0]
-
                 cache_path = os.path.join(
                     self.resample_cache_dir,
                     f"{self.dataset_name}_{key}_sr{self.sample_rate}.npy"
@@ -137,32 +141,78 @@ class AcousticScenesDataset(torch.utils.data.Dataset):
                     except Exception:
                         pass
 
+        cache_key = f"{self.dataset_name}_{os.path.splitext(os.path.basename(example['audio_path']))[0]}"
+
+        # Extract common values
+        class_label = torch.tensor(example['class_label'])
+        filename = example['audio_path']
+
         if self.multi_stream:
-            key = os.path.splitext(os.path.basename(example['audio_path']))[0]
+            # Convert to tensor and transpose: (SAMPLES, CHANNEL) -> (CHANNEL, SAMPLES)
+            audio_tensor = torch.from_numpy(audio_data.T).float()  # (2, TIME)
+
+            streams = self.preprocessor.process(audio_tensor, cache_key)
+
+            if self.input_stream is not None:
+                return {
+                    'audio_data': streams[self.input_stream],  # (1, TIME)
+                    'class_label': class_label,
+                    'filename': filename,
+                }
+
+            if len(self.input_channels) == 2:
+                return {
+                    'audio_ch1': streams[self.input_channels[0]],
+                    'audio_ch2': streams[self.input_channels[1]],
+                    'class_label': class_label,
+                    'filename': filename,
+                }
+
+            if len(self.input_channels) > 2:
+                return {
+                    'audio_ch1': streams[self.input_channels[0]],  # Left
+                    'audio_ch2': streams[self.input_channels[1]],  # Right
+                    'audio_ch3': streams[self.input_channels[2]],  # Mid
+                    'audio_ch4': streams[self.input_channels[3]],  # Side
+                    'audio_ch5': streams[self.input_channels[4]],  # Harmonic
+                    'audio_ch6': streams[self.input_channels[5]],  # Percussive
+                    'class_label': class_label,
+                    'filename': filename,
+                }
+
+            # Full streams for ensemble - handle precomputed mels
             if self.precompute_mel:
-                cache_path = os.path.join(
+                mel_cache_path = os.path.join(
                     self.mel_cache_dir,
-                    f"{self.dataset_name}_{key}_{self._mel_cache_tag}.pt"
+                    f"{self.dataset_name}_{cache_key}_{self._mel_cache_tag}.pt"
                 )
-                if os.path.exists(cache_path):
-                    example['mels'] = torch.load(cache_path, map_location='cpu', weights_only=True)
+                if os.path.exists(mel_cache_path):
+                    mels = torch.load(mel_cache_path, weights_only=True)
                 else:
-                    streams = self.preprocessor.process(torch.from_numpy(audio_data.T).float(), cache_key=key)
-                    with torch.no_grad():
-                        mels = {k: torch.log(self.mel_transform(v) + 1e-6) for k, v in streams.items()}
-                    example['mels'] = mels
+                    mels = {}
+                    for stream_name, stream_audio in streams.items():
+                        with torch.no_grad():
+                            mel = torch.log(self.mel_transform(stream_audio) + 1e-6)
+                        mels[stream_name] = mel
                     os.makedirs(self.mel_cache_dir, exist_ok=True)
                     try:
-                        torch.save(mels, cache_path)
+                        torch.save(mels, mel_cache_path)
                     except Exception:
                         pass
-            else:
-                streams = self.preprocessor.process(torch.from_numpy(audio_data.T).float(), cache_key=key)
-                example['streams'] = streams
+                return {
+                    'mels': mels,
+                    'class_label': class_label,
+                    'filename': filename,
+                }
+
+            return {
+                'streams': streams,
+                'class_label': class_label,
+                'filename': filename,
+            }
         else:
             if self.mono:
                 audio_data = audio_data.mean(axis=-1, keepdims=True)
             example['audio_data'] = torch.from_numpy(audio_data.T).float()
-
-        example['class_label'] = torch.tensor(example['class_label'])
-        return example
+            example['class_label'] = class_label
+            return example

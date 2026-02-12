@@ -43,11 +43,11 @@ class AcousticScenesExperiment(pl.LightningModule):
 
     def configure_optimizers(self):
         opt_type = (self.optimizer_type or "sgd").lower()
-        if opt_type.lower() == "adam":
+        if opt_type == "adam":
             optimizer = torch.optim.Adam(self.parameters(), lr=self.learning_rate)
-        elif opt_type.lower() == "adamw":
+        elif opt_type == "adamw":
             optimizer = torch.optim.AdamW(self.parameters(), lr=self.learning_rate, weight_decay=1e-4)
-        elif opt_type.lower() == "sgd":
+        elif opt_type == "sgd":
             optimizer = torch.optim.SGD(
                 self.parameters(),
                 lr=self.learning_rate,
@@ -60,7 +60,6 @@ class AcousticScenesExperiment(pl.LightningModule):
 
         print(f"\033[91mUsing {opt_type} optimizer with learning rate {self.learning_rate}")
         print(f"\033[91mUsing scheduler: {self.use_scheduler}\033[0m")
-        #copy prior
 
         if not self.use_scheduler:
             return optimizer
@@ -70,7 +69,6 @@ class AcousticScenesExperiment(pl.LightningModule):
             'optimizer': optimizer,
             'lr_scheduler': {
                 'scheduler': scheduler,
-                'monitor': 'val/loss',
                 'interval': 'epoch',
                 'frequency': 1,
             }

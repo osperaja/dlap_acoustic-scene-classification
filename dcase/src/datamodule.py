@@ -12,53 +12,62 @@ from typing import List, Dict, Union
 class AcousticScenesDatamodule(pl.LightningDataModule):
     def __init__(
             self,
-            batch_size: int = 8,
-            n_workers: int = 16,
             sample_rate: int = 44100,
-            mono: bool = False,
+            batch_size: int = 32,
+            n_workers: int = 4,
+            mono: bool = True,
             base_data_path: str = './data/dcase',
-            multi_stream: bool = True,
+            normalize_audio: bool = False,
+            multi_stream: bool = False,
             stream_cache_dir: str = None,
             resample_cache_dir: str = None,
             precompute_mel: bool = False,
             mel_cache_dir: str = None,
             mel_config: dict = None,
-            normalize_audio: bool = False,
+            input_stream: str = None,
+            input_channels: list = None,
             shared_mel: bool = False,
     ):
-        super(AcousticScenesDatamodule, self).__init__()
-
-        # initialize attributes
+        super().__init__()
+        self.sample_rate = sample_rate
         self.batch_size = batch_size
         self.n_workers = n_workers
+        self.mono = mono
+        self.base_data_path = base_data_path
+        self.normalize_audio = normalize_audio
+        self.multi_stream = multi_stream
+        self.stream_cache_dir = stream_cache_dir
+        self.resample_cache_dir = resample_cache_dir
+        self.precompute_mel = precompute_mel
+        self.mel_cache_dir = mel_cache_dir
+        self.mel_config = mel_config
+        self.input_stream = input_stream
+        self.input_channels = input_channels
+
+        self._dataset_kwargs = dict(
+            multi_stream=multi_stream,
+            base_data_path=base_data_path,
+            sample_rate=sample_rate,
+            mono=mono,
+            stream_cache_dir=stream_cache_dir,
+            resample_cache_dir=resample_cache_dir,
+            precompute_mel=precompute_mel,
+            mel_cache_dir=mel_cache_dir,
+            mel_config=mel_config,
+            normalize_audio=normalize_audio,
+            input_stream=input_stream,
+            input_channels=input_channels,
+        )
 
         # initialize datasets
         self.train_dataset = AcousticScenesDataset(
             dataset_name='train',
-            multi_stream=multi_stream,
-            base_data_path=base_data_path,
-            sample_rate=sample_rate,
-            mono=mono,
-            stream_cache_dir=stream_cache_dir,
-            resample_cache_dir=resample_cache_dir,
-            precompute_mel=precompute_mel,
-            mel_cache_dir=mel_cache_dir,
-            mel_config=mel_config,
-            normalize_audio=normalize_audio
+            **self._dataset_kwargs
         )
 
         self.val_dataset = AcousticScenesDataset(
             dataset_name='val',
-            multi_stream=multi_stream,
-            base_data_path=base_data_path,
-            sample_rate=sample_rate,
-            mono=mono,
-            stream_cache_dir=stream_cache_dir,
-            resample_cache_dir=resample_cache_dir,
-            precompute_mel=precompute_mel,
-            mel_cache_dir=mel_cache_dir,
-            mel_config=mel_config,
-            normalize_audio=normalize_audio
+            **self._dataset_kwargs
         )
         self.test_dataset = AcousticScenesDataset(
             dataset_name='test',
@@ -66,7 +75,9 @@ class AcousticScenesDatamodule(pl.LightningDataModule):
             base_data_path=base_data_path,
             sample_rate=sample_rate,
             mono=mono,
-            normalize_audio=normalize_audio
+            normalize_audio=normalize_audio,
+            input_stream=input_stream,
+            input_channels=input_channels,
         )
 
 

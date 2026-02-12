@@ -1,10 +1,11 @@
+import os
+
 import numpy as np
 import scipy
 import torch
 import torchaudio
 from scipy.stats import skew
 from sklearn.linear_model import LogisticRegression
-from sympy.stats import kurtosis
 from torch import nn
 from torchaudio.transforms import MelSpectrogram
 from tqdm import tqdm
@@ -295,7 +296,7 @@ class CNNModel(torch.nn.Module):
             features = precomputed_mel
         else:
             with torch.no_grad():
-                features = torch.log(self.mel_transform(audio_data) + 1e-6)
+                features = torch.log(self.mel_transform(audio_data.float()) + 1e-6)
 
         if self.spec_augment and self.training:
             for freq_mask in self.freq_masks:
@@ -345,6 +346,7 @@ class DualChannelCNNModel(torch.nn.Module):
                  n_fft: int = 2048,
                  ):
         super().__init__()
+
         self.seed = _set_and_print_seed(self.__class__.__name__, random_seed)
 
         self.conv_channels = conv_channels
@@ -352,6 +354,8 @@ class DualChannelCNNModel(torch.nn.Module):
 
         if self.conv_channels is None:
             self.conv_channels = [32, 64, 128, 256]
+
+        self.preprocessor = MultiStreamPreprocessor(sample_rate=sample_rate)
 
         self.pooling = pooling
         self.last_layer_pooling = last_layer_pooling
@@ -433,8 +437,17 @@ class DualChannelCNNModel(torch.nn.Module):
             mel2 = precomputed_mel2
         else:
             with torch.no_grad():
-                mel1 = torch.log(self.mel_transform(audio_ch1) + 1e-6)
-                mel2 = torch.log(self.mel_transform(audio_ch2) + 1e-6)
+                mel1 = torch.log(self.mel_transform(audio_ch1.float()) + 1e-6)
+                mel2 = torch.log(self.mel_transform(audio_ch2.float()) + 1e-6)
+
+        # DEBUG: Print shapes and stats once
+        if not hasattr(self, '_debug_done'):
+            print(f"\n[DEBUG DualChannelCNN]")
+            print(f"  audio_ch1 input: {audio_ch1.shape}, min={audio_ch1.min():.4f}, max={audio_ch1.max():.4f}")
+            print(f"  audio_ch2 input: {audio_ch2.shape}, min={audio_ch2.min():.4f}, max={audio_ch2.max():.4f}")
+            print(f"  mel1 shape: {mel1.shape}, min={mel1.min():.2f}, max={mel1.max():.2f}, mean={mel1.mean():.2f}")
+            print(f"  mel2 shape: {mel2.shape}, min={mel2.min():.2f}, max={mel2.max():.2f}, mean={mel2.mean():.2f}")
+            self._debug_done = True
 
         if self.spec_augment and self.training:
             for freq_mask in self.freq_masks:
@@ -444,6 +457,9 @@ class DualChannelCNNModel(torch.nn.Module):
                 mel1 = time_mask(mel1)
                 mel2 = time_mask(mel2)
 
+        # Initialize mixup variables
+        y_a, y_b, lam = None, None, None
+
         if self.use_mixup and self.training and labels is not None:
             mel1, mel2, y_a, y_b, lam = self.mixup_dual(mel1, mel2, labels)
 
@@ -451,51 +467,83 @@ class DualChannelCNNModel(torch.nn.Module):
         feat2 = self.global_pool(self.branch2(mel2)).flatten(1)
         combined = torch.cat([feat1, feat2], dim=1)
 
+        # DEBUG: Check feature stats
+        if not hasattr(self, '_debug_feat_done'):
+            print(f"  feat1: {feat1.shape}, min={feat1.min():.4f}, max={feat1.max():.4f}, mean={feat1.mean():.4f}")
+            print(f"  feat2: {feat2.shape}, min={feat2.min():.4f}, max={feat2.max():.4f}, mean={feat2.mean():.4f}")
+            self._debug_feat_done = True
+
         if not self.use_classifier:
             return {"features": combined}
 
         logits = self.classifier(combined)
+
+        # DEBUG: Check logits
+        if not hasattr(self, '_debug_logits_done'):
+            print(f"  logits: {logits.shape}, min={logits.min():.4f}, max={logits.max():.4f}")
+            print(f"  logits sample[0]: {logits[0].detach().cpu().numpy()}")
+            self._debug_logits_done = True
+
+        # Return mixup info when mixup was applied
+        if self.training and y_a is not None:
+            return {"logits": logits, "y_a": y_a, "y_b": y_b, "lam": lam}
         return {"logits": logits}
 
 
 class EnsembleCNNModel(torch.nn.Module):
-    def __init__(self,
-                 cnn_config: dict,
-                 dccnn_config: dict,
-                 sample_rate: int,
-                 shared_mel: bool,
-                 classifier_hidden: int,
-                 dropout: float,
-                 random_seed: Optional[int] = None,
-                ):
+    def __init__(
+            self,
+            cnn_config: dict,
+            dccnn_config: dict,
+            sample_rate: int,
+            shared_mel: bool,
+            classifier_hidden: int,
+            dropout: float,
+            random_seed: Optional[int] = None,
+            pretrained_checkpoints: dict = None,
+            freeze_submodels: bool = True,
+    ):
         super().__init__()
         base_seed = _set_and_print_seed(self.__class__.__name__, random_seed)
 
         self.preprocessor = MultiStreamPreprocessor(sample_rate=sample_rate)
         self.shared_mel = shared_mel
+        self.freeze_submodels = freeze_submodels
+
         if self.shared_mel:
             if cnn_config.get('n_mels') != dccnn_config.get('n_mels'):
-                raise ValueError("shared_mel requires matching n_mels for cnn and dccnn configs")
+                raise ValueError("shared_mel requires matching n_mels")
             self.mel_transform = MelSpectrogram(
                 sample_rate=sample_rate,
                 n_fft=cnn_config.get('n_fft', 2048),
                 f_min=cnn_config.get('f_min', 0.0),
                 f_max=cnn_config.get('f_max', 22050.0),
-                n_mels=cnn_config.get('n_mels', 40),
+                n_mels=cnn_config.get('n_mels', 128),
             )
 
+        # Force use_classifier=False for ensemble sub-models (we use shared classifier)
+        # cnn_config_ensemble = {**cnn_config, 'use_classifier': False}
+        dccnn_config_ensemble = {**dccnn_config, 'use_classifier': False}
+
         self.models = nn.ModuleDict({
-            'stereo': DualChannelCNNModel(**{**dccnn_config, 'random_seed': base_seed}),
-            'ms': DualChannelCNNModel(**{**dccnn_config, 'random_seed': base_seed + 1}),
-            'harmonic': CNNModel(**{**cnn_config, 'random_seed': base_seed + 2}),
-            'percussive': CNNModel(**{**cnn_config, 'random_seed': base_seed + 3}),
+            'stereo': DualChannelCNNModel(**{**dccnn_config_ensemble, 'random_seed': base_seed}),
+            'ms': DualChannelCNNModel(**{**dccnn_config_ensemble, 'random_seed': base_seed + 1}),
+            'hpss': DualChannelCNNModel(**{**dccnn_config_ensemble, 'random_seed': base_seed + 2}),
         })
 
-        cnn_feat_dim = cnn_config.get('conv_channels')[-1]
+        # Load pretrained checkpoints if provided
+        if pretrained_checkpoints:
+            self._load_pretrained_checkpoints(pretrained_checkpoints)
+
+        # Freeze sub-models if requested (train only classifier)
+        if self.freeze_submodels and pretrained_checkpoints:
+            self._freeze_submodels()
+
+        # cnn_feat_dim = cnn_config.get('conv_channels')[-1]
         dccnn_feat_dim = dccnn_config.get('conv_channels')[-1] * 2
         n_label = cnn_config.get('n_label', 15)
 
-        total_feat_dim = (dccnn_feat_dim * 2) + (cnn_feat_dim * 2)
+        total_feat_dim = (dccnn_feat_dim * 3)
 
         self.classifier = nn.Sequential(
             nn.Linear(total_feat_dim, classifier_hidden),
@@ -504,48 +552,73 @@ class EnsembleCNNModel(torch.nn.Module):
             nn.Linear(classifier_hidden, n_label),
         )
 
-    def forward(self, audio_stereo: torch.Tensor, labels=None):
-        batch_streams = None
-        log_mels = {}
-        if isinstance(audio_stereo, dict):
-            if 'mels' in audio_stereo:
-                log_mels = audio_stereo['mels']
-            elif 'streams' in audio_stereo:
-                batch_streams = audio_stereo['streams']
-            else:
-                raise RuntimeError("multi_stream forward expects 'streams' or 'mels'")
-        else:
-            raise RuntimeError("multi_stream forward expects a dict batch")
+    def _load_pretrained_checkpoints(self, checkpoints: dict):
+        """
+        Load pretrained weights for sub-models.
+        """
+        for name, ckpt_path in checkpoints.items():
+            if name not in self.models:
+                print(f"Warning: Unknown model name '{name}', skipping")
+                continue
 
+            if ckpt_path is None:
+                print(f"No checkpoint for '{name}', using random init")
+                continue
+
+            print(f"Loading pretrained checkpoint for '{name}' from {ckpt_path}")
+
+            # Load the full experiment checkpoint
+            checkpoint = torch.load(ckpt_path, map_location='cpu', weights_only=True)
+            state_dict = checkpoint.get('state_dict', checkpoint)
+
+            # Extract only the model weights (remove 'model.' prefix from experiment)
+            model_state_dict = {}
+            for key, value in state_dict.items():
+                if key.startswith('model.'):
+                    new_key = key[6:]  # Remove 'model.' prefix
+                    # Skip classifier weights (we use our own)
+                    if not new_key.startswith('classifier'):
+                        model_state_dict[new_key] = value
+
+            # Load weights into sub-model
+            missing, unexpected = self.models[name].load_state_dict(
+                model_state_dict, strict=False
+            )
+            if missing:
+                print(f"  Missing keys: {missing}")
+            if unexpected:
+                print(f"  Unexpected keys: {unexpected}")
+
+    def _freeze_submodels(self):
+        """Freeze all sub-model parameters, only classifier will be trained."""
+        for name, model in self.models.items():
+            for param in model.parameters():
+                param.requires_grad = False
+            print(f"Froze parameters for '{name}'")
+
+    def unfreeze_submodels(self):
+        """Unfreeze sub-models for fine-tuning."""
+        for name, model in self.models.items():
+            for param in model.parameters():
+                param.requires_grad = True
+            print(f"Unfroze parameters for '{name}'")
+
+    def forward(self, audio_ch1, audio_ch2, audio_ch3, audio_ch4, audio_ch5, audio_ch6, labels=None):
         all_logits = []
-        if self.shared_mel and batch_streams is not None:
-            for key, stream in batch_streams.items():
-                with torch.no_grad():
-                    mel = torch.log(self.mel_transform(stream) + 1e-6)
-                    mel = (mel - mel.mean(dim=-1, keepdim=True)) / (mel.std(dim=-1, keepdim=True) + 1e-6)
-                    log_mels[key] = mel
 
-        pairs = {
-            'stereo': ('left', 'right'),
-            'ms': ('mid', 'side'),
+        channel_pairs = {
+            'stereo': (audio_ch1, audio_ch2),
+            'ms': (audio_ch3, audio_ch4),
+            'hpss': (audio_ch5, audio_ch6),
         }
 
-        for name, (s1_key, s2_key) in pairs.items():
-            if log_mels:
-                out = self.models[name](None, None, labels, log_mels[s1_key], log_mels[s2_key])
-            else:
-                s1 = batch_streams[s1_key]
-                s2 = batch_streams[s2_key]
-                out = self.models[name](s1, s2, labels)
+        for name, (ch1, ch2) in channel_pairs.items():
+            out = self.models[name](
+                audio_ch1=ch1,
+                audio_ch2=ch2,
+                labels=labels,
+            )
             all_logits.append(out['features'])
-
-        for name in ['harmonic', 'percussive']:
-            if log_mels:
-                out = self.models[name](None, precomputed_mel=log_mels[name])
-            else:
-                out = self.models[name](batch_streams[name])
-            feat = out['features']
-            all_logits.append(feat)
 
         combined = torch.cat(all_logits, dim=1)
         logits = self.classifier(combined)

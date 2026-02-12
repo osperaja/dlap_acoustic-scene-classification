@@ -43,18 +43,36 @@ class CNNExperiment(AcousticScenesExperiment):
         batch = self._move_to_device(batch)
         target_label = batch['class_label']  # (BATCH)
 
+        # Get batch size for logging
+        batch_size = target_label.size(0)
+
         # Forward model - pass labels for mixup during training
         labels_for_mixup = target_label if stage == 'train' else None
-        
+
+        # Determine input format and call appropriate forward
         if 'streams' in batch or 'mels' in batch:
-            # Pass the streams dict directly if it exists (from multi_stream dataset)
             output = self.model(batch, labels_for_mixup)
+        elif all(key in batch for key in ['audio_ch1', 'audio_ch2', 'audio_ch3', 'audio_ch4', 'audio_ch5', 'audio_ch6']):
+            output = self.model(
+                batch['audio_ch1'],
+                batch['audio_ch2'],
+                batch['audio_ch3'],
+                batch['audio_ch4'],
+                batch['audio_ch5'],
+                batch['audio_ch6'],
+                labels_for_mixup
+            )
+        elif 'audio_ch1' in batch and 'audio_ch2' in batch:
+            output = self.model(
+                batch['audio_ch1'],
+                batch['audio_ch2'],
+                labels_for_mixup
+            )
         else:
-            audio_data = batch['audio_data']  # (BATCH, CHANNEL, TIME)
+            audio_data = batch['audio_data']
             output = self.model(audio_data, labels_for_mixup)
 
-        # Handle dict output from CNNModel
-        logits = output["logits"]  # (BATCH, n_label)
+        logits = output["logits"]
 
         # Compute loss
         if stage == 'train' and "y_a" in output:
@@ -64,9 +82,10 @@ class CNNExperiment(AcousticScenesExperiment):
 
         # Compute accuracy
         with torch.no_grad():
-            est_label = torch.argmax(logits, dim=-1)  # (BATCH)
+            est_label = torch.argmax(logits, dim=-1)
             est_accuracy = self.accuracy(est_label, target_label)
 
+        # Add batch_size to all log calls!
         self.log(
             f'{stage}/loss',
             loss,
@@ -74,7 +93,8 @@ class CNNExperiment(AcousticScenesExperiment):
             on_epoch=True,
             logger=True,
             sync_dist=True,
-            prog_bar=False
+            prog_bar=False,
+            batch_size=batch_size
         )
         if stage == 'train':
             self.running_accuracy(est_accuracy)
@@ -87,7 +107,8 @@ class CNNExperiment(AcousticScenesExperiment):
                 on_epoch=False,
                 logger=True,
                 sync_dist=True,
-                prog_bar=False
+                prog_bar=False,
+                batch_size=batch_size
             )
             self.log(
                 f'{stage}/running_accuracy',
@@ -96,7 +117,8 @@ class CNNExperiment(AcousticScenesExperiment):
                 on_epoch=False,
                 logger=True,
                 sync_dist=True,
-                prog_bar=True
+                prog_bar=True,
+                batch_size=batch_size
             )
         elif stage == 'val':
             self.log(
@@ -106,6 +128,8 @@ class CNNExperiment(AcousticScenesExperiment):
                 on_epoch=True,
                 logger=True,
                 sync_dist=True,
-                prog_bar=False
+                prog_bar=False,
+                batch_size=batch_size
             )
         return loss
+
