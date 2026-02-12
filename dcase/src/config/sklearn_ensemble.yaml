@@ -1,0 +1,30 @@
+model: SklearnAudioEnsembleClassifier
+
+data:
+  base_data_path: "./data/dcase"
+  sample_rate: 44100
+  mono: true
+  batch_size: 64
+  n_workers: 4
+
+experiment:
+  n_label: 15
+
+ensemble:
+  type: "voting"
+  base_classifiers:
+    - name: "random_forest"
+      n_mels: 40
+      params:
+        n_estimators: 2500
+        max_depth: 28
+    - name: "pca_svm"
+      n_mels: 40
+      params:
+        n_components: 96
+        svm_C: 13.0
+        svm_kernel: "rbf"
+  final_estimator:
+    type: "logistic_regression"
+    params:
+      max_iter: 5000

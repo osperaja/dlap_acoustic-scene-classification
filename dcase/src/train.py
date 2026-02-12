@@ -1,30 +1,76 @@
-import warnings
-warnings.filterwarnings("ignore", category=FutureWarning)
+import argparse
+
 import pytorch_lightning as pl
 from pytorch_lightning import loggers as pl_loggers
-from pytorch_lightning.callbacks import ModelSummary, ModelCheckpoint
+from pytorch_lightning.callbacks import ModelSummary, ModelCheckpoint, EarlyStopping
 import yaml
 from torch.multiprocessing import set_start_method
-from dcase.src.datamodule import AcousticScenesDatamodule as DM
+try:
+    from .datamodule import AcousticScenesDatamodule as DM
+    from .models import BaselineModel, LinSeqModel, CNNModel, EnsembleCNNModel, CNNTCNModel, DualChannelCNNModel
+    from .baseline_experiment import BaselineExperiment as BLExp
+    from .cnn_experiment import CNNExperiment as CNNExp
+except ImportError:
+    from datamodule import AcousticScenesDatamodule as DM
+    from models import BaselineModel, LinSeqModel, CNNModel, EnsembleCNNModel, CNNTCNModel, DualChannelCNNModel
+    from baseline_experiment import BaselineExperiment as BLExp
+    from cnn_experiment import CNNExperiment as CNNExp
 
-# experiment specific imports and settings
-from dcase.src.models import BaselineModel as Model
-from dcase.src.baseline_experiment import BaselineExperiment as Exp
-CONFIG_PATH = 'config/baseline.yaml'
-EXP_NAME = 'baseline'
+MODEL_REGISTRY = {
+    'BaselineModel': BaselineModel,
+    'LinSeqModel': LinSeqModel,
+    'CNNModel': CNNModel,
+    'DualChannelCNNModel': DualChannelCNNModel,
+    'EnsembleCNNModel': EnsembleCNNModel,
+    'CNNTCNModel': CNNTCNModel,
+}
+
+EXPERIMENT_REGISTRY = {
+    'BaselineModel': BLExp,
+    'LinSeqModel': BLExp,
+    'CNNModel': CNNExp,
+    'DualChannelCNNModel': CNNExp,
+    'EnsembleCNNModel': CNNExp,
+    'CNNTCNModel': CNNExp,
+}
+
+class DelayedStartEarlyStopping(EarlyStopping):
+    def __init__(self, start_epoch, *args, **kwargs):
+        super().__init__(*args, **kwargs)
+        # set start_epoch to None or 0 for no delay
+        self.start_epoch = start_epoch
+
+    def on_train_epoch_end(self, trainer: "pl.Trainer", pl_module: "pl.LightningModule") -> None:
+        if (self.start_epoch is not None) and (trainer.current_epoch < self.start_epoch):
+            return
+        super().on_train_epoch_end(trainer, pl_module)
+
+    def on_validation_end(self, trainer: "pl.Trainer", pl_module: "pl.LightningModule") -> None:
+        if (self.start_epoch is not None) and (trainer.current_epoch < self.start_epoch):
+            return
+        super().on_validation_end(trainer, pl_module)
 
 
-def setup_logging(tb_log_dir: str, exp_name: str, version_id: int=None):
+
+def setup_logging(tb_log_dir: str, exp_name: str, version_id: int = None):
     if version_id is None:
         tb_logger = pl_loggers.TensorBoardLogger(tb_log_dir, name=exp_name, log_graph=False)
         version_id = int((tb_logger.log_dir).split('_')[-1])
     else:
         tb_logger = pl_loggers.TensorBoardLogger(tb_log_dir, name=exp_name, log_graph=False, version=version_id)
-
     return tb_logger, version_id
 
 
-def get_trainer(devices, logger, max_epochs, strategy, accelerator, ckpt_dir):
+def get_trainer(
+        devices,
+        logger,
+        max_epochs,
+        strategy,
+        accelerator,
+        ckpt_dir,
+        precision=32,
+        accumulate_grad_batches=1,
+):
     checkpoint_callback = ModelCheckpoint(
         dirpath=ckpt_dir,
         save_top_k=3,
@@ -33,38 +79,70 @@ def get_trainer(devices, logger, max_epochs, strategy, accelerator, ckpt_dir):
         auto_insert_metric_name=False,
         filename='epoch={epoch}-val_acc={val/accuracy:.2f}'
     )
-    return pl.Trainer(enable_model_summary=True,
+    early_stop = DelayedStartEarlyStopping( # https://github.com/Lightning-AI/pytorch-lightning/issues/16881, https://github.com/samgelman
+        start_epoch=100,
+        monitor="val/accuracy",
+        patience=90,
+        mode="max",
+        verbose=True,
+    )
+    return pl.Trainer(
+        enable_model_summary=True,
         logger=logger,
         devices=devices,
         max_epochs=max_epochs,
-        strategy = strategy,
-        accelerator = accelerator,
-        callbacks=[checkpoint_callback, ModelSummary(max_depth=2)],
+        strategy=strategy,
+        accelerator=accelerator,
+        precision=precision,
+        accumulate_grad_batches=accumulate_grad_batches,
+        callbacks=[checkpoint_callback, ModelSummary(max_depth=4), early_stop],
+        log_every_n_steps=36
     )
 
 
-if __name__== "__main__":
-    # invoke multiprocessing
+if __name__ == "__main__":
+    parser = argparse.ArgumentParser()
+    parser.add_argument('--config', type=str, default='config/baseline.yaml', help='Path to config YAML')
+    args = parser.parse_args()
+
     set_start_method('spawn', force=True)
 
-    # instantiate experiment
-    with open(CONFIG_PATH, 'r') as file:
+    with open(args.config, 'r') as file:
         config = yaml.safe_load(file)
-    config['network']['sample_rate'] = config['data']['sample_rate']
-    config['network']['n_label'] = config['experiment']['n_label']
+
+    model_name = config.get('model', 'BaselineModel')
+    ModelClass = MODEL_REGISTRY[model_name]
+    ExpClass = EXPERIMENT_REGISTRY[model_name]
+
+    global_seed = config.get('random_seed', None)
+
+    # create model based on type
+    if model_name == 'EnsembleCNNModel':
+        model = ModelClass(
+            cnn_config=config['network']['cnn_config'],
+            dccnn_config=config['network']['dccnn_config'],
+            sample_rate=config['data']['sample_rate'],
+            random_seed=global_seed,
+            shared_mel=config['data']['shared_mel'],
+            classifier_hidden=config['network']['classifier_hidden'],
+            dropout=config['network']['dropout'],
+            pretrained_checkpoints=config['network'].get('pretrained_checkpoints'),
+            freeze_submodels=config['network'].get('freeze_submodels', False),
+        )
+    else:
+        config['network']['sample_rate'] = config['data']['sample_rate']
+        config['network']['n_label'] = config['experiment']['n_label']
+        if 'augmentation' in config:
+            config['network'].update(config['augmentation'])
+        model = ModelClass(**config['network'], random_seed=global_seed)
+        # model = ModelClass(**config['network'])
+
     dm = DM(**config['data'])
-    model = Model(
-        **config['network'], 
-    )
-    exp = Exp(
-        model=model, 
-        **config['experiment'], 
-    )
+    exp = ExpClass(model=model, **config['experiment'])
 
-    # setup logging 
-    tb_logger, version = setup_logging(config['logging']['tb_log_dir'], EXP_NAME)
-    ckpt_dir = config['logging']['ckpt_dir'] + EXP_NAME
+    exp_name = model_name.lower()
+    tb_logger, version = setup_logging(config['logging']['tb_log_dir'], exp_name)
+    ckpt_dir = config['logging']['ckpt_dir'] + exp_name
 
-    # train
     trainer = get_trainer(logger=tb_logger, **config['training'], ckpt_dir=ckpt_dir)
     trainer.fit(exp, dm)

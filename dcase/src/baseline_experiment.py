@@ -1,5 +1,9 @@
 import torch
-from dcase.src.experiment import AcousticScenesExperiment
+
+try:
+    from .experiment import AcousticScenesExperiment
+except ImportError:
+    from experiment import AcousticScenesExperiment
 from torchmetrics import Accuracy
 from torchmetrics.aggregation import RunningMean
 from typing import Literal
@@ -11,7 +15,7 @@ class BaselineExperiment(AcousticScenesExperiment):
             model: torch.nn.Module,
             n_label: int,
             **exp_kwargs,
-        ):
+    ):
         super(BaselineExperiment, self).__init__(**exp_kwargs)
 
         # init attributes
@@ -22,14 +26,14 @@ class BaselineExperiment(AcousticScenesExperiment):
         self.accuracy = Accuracy(task='multiclass', num_classes=n_label)
         self.running_accuracy = RunningMean(window=100)
 
-    def shared_step(self, batch, batch_idx, stage: Literal['train', 'val']):
+    def shared_step(self, batch, batch_idx, stage: Literal['train', 'val', 'test']):
         # load data
         audio_data = batch['audio_data'].to(device=self.device)  # (BATCH, CHANNEL, TIME)
         target_label = batch['class_label'].to(device=self.device)  # (BATCH)
-        
+
         # forward model
         logits = self.model(audio_data)  # (BATCH, FRAMES', CLASS)
-        
+
         # compute loss
         t_label = target_label[:, None].expand(logits.shape[:-1])  # (BATCH, FRAMES')
         loss = self.ce_loss(
@@ -44,9 +48,9 @@ class BaselineExperiment(AcousticScenesExperiment):
                     torch.bincount(e_label).argmax() for e_label in est_label
                 ]
             )  # (BATCH)
-            est_accuracy = self.accuracy(est_label, target_label)     
+            est_accuracy = self.accuracy(est_label, target_label)
 
-        # loss and accuracy logging
+            # loss and accuracy logging
         self.log(
             f'{stage}/loss',
             loss,
@@ -78,5 +82,3 @@ class BaselineExperiment(AcousticScenesExperiment):
                 prog_bar=False
             )
         return loss
-
-    

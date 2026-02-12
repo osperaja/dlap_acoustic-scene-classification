@@ -1,0 +1,91 @@
+model: EnsembleCNNModel
+
+data:
+  base_data_path: "./data/dcase"
+  sample_rate: 44100
+  mono: false
+  normalize_audio: true
+  multi_stream: true
+  stream_cache_dir: "./data/dcase/preprocessed_features"
+  precompute_mel: true
+  mel_cache_dir: "./data/dcase/precomputed_mels"
+  mel_config:
+    n_fft: 2048
+    f_min: 0.0
+    f_max: 22050.0
+    n_mels: 128
+  batch_size: 64
+  n_workers: 8
+  shared_mel: true
+  input_channels: ["left", "right", "mid", "side", "harmonic", "percussive"]
+
+experiment:
+  n_label: 15
+  max_epochs: 100
+  learning_rate: 0.01
+  optimizer_type: "SGD"
+  use_scheduler: true
+
+network:
+  classifier_hidden: 1024
+  dropout: 0.3
+  freeze_submodels: true
+
+#  pretrained_checkpoints:
+#    stereo: "./data/ckpts/dccnn_stereodualchannelcnnmodel/epoch=108-val_acc=0.80.ckpt"
+#    ms: "./data/ckpts/dccnn_msdualchannelcnnmodel/epoch=97-val_acc=0.85.ckpt"
+#    hpss: "./data/ckpts/dccnn_hpssdualchannelcnnmodel/epoch=132-val_acc=0.81.ckpt"
+  pretrained_checkpoints:
+    stereo: "./../../data/ckpts/dccnn_stereodualchannelcnnmodel/epoch=108-val_acc=0.80.ckpt"
+    ms: "./../../data/ckpts/dccnn_msdualchannelcnnmodel/epoch=97-val_acc=0.85.ckpt"
+    hpss: "./../../data/ckpts/dccnn_hpssdualchannelcnnmodel/epoch=132-val_acc=0.81.ckpt"
+
+  cnn_config:
+    n_label: 15
+    n_mels: 128
+    dropout: 0.0
+    last_layer_pooling: true
+    pooling: [ 2,2 ]
+#    cnn_conv_channels: [ 32, 64, 128, 256 ]
+    conv_channels: [ 32, 64, 128, 256 ]
+    use_classifier: false
+    classifier_hidden: 512
+    spec_augment: false
+    freq_mask_param: 15
+    time_mask_param: 20
+    n_freq_masks: 2
+    n_time_masks: 2
+    use_mixup: true
+    mixup_alpha: 0.1
+#  random_seed: 0
+
+  dccnn_config:
+    n_label: 15
+    n_mels: 128
+    dropout: 0.0
+    last_layer_pooling: true
+    pooling: [ 2,2 ]
+#    dccnn_conv_channels: [ 32, 64, 128, 256 ]
+    conv_channels: [ 32, 64, 128, 256 ]
+    use_classifier: false
+    classifier_hidden: 512
+    spec_augment: false
+    freq_mask_param: 15
+    time_mask_param: 20
+    n_freq_masks: 2
+    n_time_masks: 2
+    use_mixup: true
+    mixup_alpha: 0.1
+#  random_seed: 0
+
+training:
+  max_epochs: 200
+  strategy: auto
+  accelerator: auto
+  devices: 1
+  precision: 32
+  accumulate_grad_batches: 2
+
+logging:
+  tb_log_dir: "./data/tb_logs/"
+  ckpt_dir: "./data/ckpts/"
