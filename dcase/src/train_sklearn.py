@@ -54,7 +54,7 @@ def plot_confusion_matrix(y_true, y_pred, class_names, save_path=None):
         plt.savefig(save_path, bbox_inches='tight', dpi=300)
     plt.show()
 
-def plot_confusion_matrix(y_true, y_pred, class_names,
+def plot_confusion_matrix_thresh(y_true, y_pred, class_names,
                           save_path=None,
                           min_confusion=0.10):
     """
