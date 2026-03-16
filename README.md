@@ -65,3 +65,13 @@ Here is a more detailed summary of the network architecture:
 - The system performance was measured using accuracy, defined as the ratio between the number of correct system outputs and the total number of outputs. 
 
 With a correct setup, you should achieve > 60% accuracy on the validation dataset.
+
+## Attribution
+
+The baseline code for this project was provided by the
+Signal Processing Group, University of Hamburg (UHH),
+as part of the course *Deep Learning for Audio Processing*.
+
+All extensions, architectural developments, and pipeline
+modifications beyond the provided baseline were designed
+and implemented independently by Jamil Osoria Peralta.
