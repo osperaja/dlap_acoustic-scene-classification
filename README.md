@@ -77,7 +77,7 @@ and implemented independently by me.
 
 ## Acknowledgements
 
-I would like to express sincere gratitude to a researcher whose detailed and thoughtful feedback, spanning overarching narrative structure, scientific storytelling, and granular prose decisions, was instrumental in shaping the final quality of this report.
+I would like to express sincere gratitude to a researcher whose detailed and thoughtful feedback, in regard to the spanning overarching narrative structure, scientific storytelling, and granular prose decisions, was instrumental in shaping the final quality of this report.
 
 ## Presentation
 
