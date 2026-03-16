@@ -50,7 +50,6 @@ python3 dcase/src/train_sklearn.py --config dcase/src/config/sklearn_ensemble.ya
 ## Baseline System
 
 Your first task will be to code the DCASE baseline system. You can already find an empty skeleton in `models.py`. This baseline consists of a Multilayer Perceptron (MLP) architecture with roughly 16k learnable parameters (CHAT-GPT3 has 175 billion). A high-level schematic of the baseline framework is given below:
-![error loading img](baseline_schematic.png)
 
 Here is a more detailed summary of the network architecture:
 - The implementation is based on a multilayer perceptron architecture (MLP) and uses log mel-band energies as features.
@@ -74,4 +73,8 @@ as part of the course *Deep Learning for Audio Processing*.
 
 All extensions, architectural developments, and pipeline
 modifications beyond the provided baseline were designed
-and implemented independently by Jamil Osoria Peralta.
+and implemented independently by me.
+
+## Acknowledgements
+
+I would like to express sincere gratitude to a researcher whose detailed and thoughtful feedback, spanning overarching narrative structure, scientific storytelling, and granular prose decisions, was instrumental in shaping the final quality of this report. 
