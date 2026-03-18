@@ -3,7 +3,7 @@
 ## Git Repository with Pytorch Lightning Framework
 
 This Git repository contains a basic Pytorch Lightning framework for the Deep Learning for Audio Processing (DLAP) project, which is oriented on the DCASE challenge. It should pose as a starting point for your code-basis and provide you with the structure to recreate the DCASE baseline. Each group has their own repository with a duplicate of this framework. The first steps in using it should be:
-- Clone the reposiory on your local machine with `git clone link_to_your_repo`
+- Clone the reposiory on your local machine with `git clone https://github.com/osperaja/dlap_acoustic-scene-classification.git`
 - Create a new virtual environment with `python -m venv your_venv_name`
 - Install the package in development mode with `pip install -e .`
 
@@ -16,7 +16,7 @@ The project supports multiple model architectures via YAML configuration files. 
 | Model                            | Config                  | Description                                                                  |
 |----------------------------------|-------------------------|------------------------------------------------------------------------------|
 | `BaselineModel`                  | `baseline.yaml`         | DCASE baseline MLP with 5-frame context (200 input features)                 |
-| `LinSeqModel`                    | `linseq.yaml`           | Extended linear sequential model with SpecAugment                            |
+| `LinSeqModel`                    | `linseq.yaml`           | Deeper MLP with optional SpecAugment                            |
 | `CNNModel`                       | `cnn.yaml`              | CNN with optional SpecAugment and Mixup                         |
 | `DualChannelCNNModel`                       | `dccnn_hpss.yaml`              | Dual channel CNN with optional SpecAugment and Mixup on harmonic percussive separated sound                          |
 | `DualChannelCNNModel`                       | `dccnn_ms.yaml`              | Dual channel CNN with optional SpecAugment and Mixup on spatial sound                          |
