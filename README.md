@@ -81,5 +81,5 @@ I would like to express sincere gratitude to a researcher whose detailed and tho
 
 ## Presentation
 
-Beamer slides prepared for a research talk on the methodology 
+Beamer [slides](https://github.com/osperaja/dlap_acoustic-scene-classification/blob/main/dlap_inductive-bias-slides.pdf) prepared for a research talk on the methodology 
 and findings of this project.
