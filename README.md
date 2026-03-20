@@ -67,7 +67,8 @@ source venv/bin/activate
 pip install -e .
 ```
 
-The project uses [PyTorch Lightning](https://lightning.ai/) throughout.
+PyTorch models use [PyTorch Lightning](https://lightning.ai/docs/pytorch/stable/).
+Classical ML models use [scikit-learn](https://scikit-learn.org/stable/).
 All models are configured via YAML files and share a common training pipeline with shuffled data loaders, min-epoch gated early stopping (after epoch 100), and best-checkpoint saving based on validation accuracy.
 
 ---
