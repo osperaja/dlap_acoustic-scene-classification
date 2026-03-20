@@ -37,6 +37,7 @@ The best model achieved in this work, the **mid/side 2-ConvNet**, reaches **84.8
 
 Performance improvements followed a consistent pattern: models that introduced stronger task-aligned inductive biases yielded the most substantial gains.
 The largest single jump comes from switching to convolutional architectures; representational alignment via mid/side decomposition then pushes further without adding architectural complexity.
+The mid/side 2-ConvNet would rank approximately 6th among DCASE 2017 Task 1 submissions; the baseline places around 54th.
 
 ---
 
