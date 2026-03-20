@@ -27,6 +27,7 @@ The best model achieved in this work, the **mid/side 2-ConvNet**, reaches **84.8
 | Extended MLP | Mono | 71.5% |
 | PCA + SVC & Random Forest | Mono | 72.6% |
 | VGGNet-style ConvNet | Mono | 79.6% |
+| Stereo 2-ConvNet | Stereo | 79.6% |
 | ConvNet–TCN Hybrid | Mono | 80.4% |
 | HPSS 2-ConvNet | Harmonic/Percussive | 80.9% |
 | Multi-stream ConvNet Ensemble | Combined | 83.3% |
