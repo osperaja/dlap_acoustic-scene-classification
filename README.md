@@ -22,7 +22,7 @@ The best model achieved in this work, the **mid/side 2-ConvNet**, reaches **84.8
 | Model | Input | Val. Accuracy |
 |---|---|---|
 | Random Forest | Mono | 65.7% |
-| Baseline MLP | Mono | 66.1% |
+| Baseline MLP (~#54 in DCASE 2017 Challenge, Task 1) | Mono | 66.1% |
 | PCA + SVC | Mono | 66.7% |
 | Extended MLP | Mono | 71.5% |
 | PCA + SVC & Random Forest | Mono | 72.6% |
