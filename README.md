@@ -31,8 +31,9 @@ The best model achieved in this work, the **mid/side 2-ConvNet**, reaches **84.8
 | ConvNet–TCN Hybrid | Mono | 80.4% |
 | HPSS 2-ConvNet | Harmonic/Percussive | 80.9% |
 | Multi-stream ConvNet Ensemble | Combined | 83.3% |
+| HLP17 1-ConvNet (reference) | Mono | 84.4% |
 | **Mid/side 2-ConvNet** | **Mid/Side** | **84.8%** |
-| HLP17 Full Ensemble (reference) | Combined | 91.7% |
+| HLP17 Full Ensemble (reference, #2 in DCASE 2017 Challenge, Task 1) | Combined | 91.7% |
 
 Performance improvements followed a consistent pattern: models that introduced stronger task-aligned inductive biases yielded the most substantial gains.
 The largest single jump comes from switching to convolutional architectures; representational alignment via mid/side decomposition then pushes further without adding architectural complexity.
