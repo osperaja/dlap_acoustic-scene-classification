@@ -11,7 +11,7 @@ The result is a controlled comparison across model families that makes the sourc
 
 The project is oriented on Task 1 of the [DCASE Challenge](https://dcase.community/) and evaluated on the TUT Acoustic Scenes 2016–2018 development datasets.
 
-[Report](fibonacci_DLAP-report.pdf) · [Slides](dlap_inductive-bias-slides.pdf)
+[Report](DLAP-report.pdf) · [Slides](dlap_inductive-bias-slides.pdf)
 
 ---
 
