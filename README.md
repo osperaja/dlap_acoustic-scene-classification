@@ -151,7 +151,7 @@ Experiments use the development portion of the TUT Acoustic Scenes 2016–2018 d
 
 The baseline framework and course infrastructure were provided by the **Signal Processing Group, University of Hamburg (UHH)** as part of the course *Deep Learning for Audio Processing*.
 
-All architectural developments beyond the provided baseline—the extended MLP, VGGNet-style ConvNet, ConvNet–TCN hybrid, multi-stream ensemble, mid/side decomposition, and pipeline extensions—were designed and implemented independently.
+All architectural developments beyond the provided baseline—the extended MLP, VGGNet-style ConvNet, ConvNet–TCN hybrid, multi-stream ensemble, strean decomposition processor, and pipeline extensions—were designed and implemented independently.
 
 ---
 
